@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,6 +14,11 @@ import 'package:ogretmenim/ozellikler/giris/ana_sayfa.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Masaüstü platformları için sqflite_common_ffi başlatılıyor
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   await initializeDateFormatting('tr_TR', null);
   runApp(const ProviderScope(child: OgretmenimUygulamasi()));
 }
