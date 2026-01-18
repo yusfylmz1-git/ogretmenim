@@ -49,6 +49,8 @@ class VeritabaniYardimcisi {
         cinsiyet $textType,
         foto_yolu $textNullable,
         olusturulma_tarihi $textType,
+        sinif_adi $textNullable,
+        selected INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (sinif_id) REFERENCES siniflar (id) ON DELETE CASCADE
       )
     ''');

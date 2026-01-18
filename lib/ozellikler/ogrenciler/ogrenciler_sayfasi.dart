@@ -1,10 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ogretmenim/gen_l10n/app_localizations.dart';
 import 'package:ogretmenim/ozellikler/ogrenciler/ogrenci_ekle_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/ogrenciler/ogrenciler_provider.dart';
 import 'package:ogretmenim/veri/modeller/sinif_model.dart';
+import 'package:ogretmenim/cekirdek/araclar/pdf_servisi.dart';
+// YENİ EKLENDİ: Excel Servisi
+import 'pdf_onizleme_sayfasi.dart';
+import 'package:ogretmenim/cekirdek/araclar/bildirim_araci.dart';
+import 'excel_preview_edit_page.dart';
 
 class OgrencilerSayfasi extends ConsumerStatefulWidget {
   final SinifModel sinif;
@@ -16,10 +20,9 @@ class OgrencilerSayfasi extends ConsumerStatefulWidget {
 }
 
 class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
-  // Arama için gerekli değişkenler
-  bool _aramaModu = false; // Arama kutusu açık mı?
+  bool _aramaModu = false;
   final TextEditingController _aramaController = TextEditingController();
-  String _aramaMetni = ""; // Filtreleme için kullanılacak metin
+  String _aramaMetni = "";
 
   @override
   void initState() {
@@ -28,7 +31,6 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
       ref.read(ogrencilerProvider.notifier).ogrencileriYukle(widget.sinif.id!);
     });
 
-    // Arama kutusuna yazılanları dinle
     _aramaController.addListener(() {
       setState(() {
         _aramaMetni = _aramaController.text.toLowerCase();
@@ -44,12 +46,9 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
 
   @override
   Widget build(BuildContext context) {
-    final dil = AppLocalizations.of(context)!;
-    final tumOgrenciler = ref.watch(ogrencilerProvider); // Tüm liste
+    final tumOgrenciler = ref.watch(ogrencilerProvider);
     final anaRenk = Theme.of(context).primaryColor;
 
-    // --- FİLTRELEME MANTIĞI ---
-    // Eğer arama metni boşsa hepsini göster, doluysa filtrele
     final goruntulenenListe = _aramaMetni.isEmpty
         ? tumOgrenciler
         : tumOgrenciler.where((ogrenci) {
@@ -60,8 +59,6 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                 numara.contains(_aramaMetni);
           }).toList();
 
-    // İstatistikler (Filtrelenmiş listeye göre değil, TÜM listeye göre olmalı)
-    final int toplamOgrenci = tumOgrenciler.length;
     final int kizSayisi = tumOgrenciler
         .where((o) => o.cinsiyet == 'Kız')
         .length;
@@ -70,59 +67,49 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
         .length;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        // 👇 ARAMA MODUNA GÖRE BAŞLIK DEĞİŞİR 👇
         title: _aramaModu
             ? TextField(
                 controller: _aramaController,
-                autofocus: true, // Açılınca direkt klavye gelsin
+                autofocus: true,
                 style: const TextStyle(color: Colors.white),
                 cursorColor: Colors.white,
                 decoration: const InputDecoration(
-                  hintText: 'Öğrenci Ara...',
+                  hintText: 'İsim veya numara...',
                   hintStyle: TextStyle(color: Colors.white70),
                   border: InputBorder.none,
                 ),
               )
             : Text(widget.sinif.sinifAdi),
-
         centerTitle: true,
         backgroundColor: anaRenk,
         foregroundColor: Colors.white,
         elevation: 0,
-
-        // Geri butonu davranışı
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
           onPressed: () {
             if (_aramaModu) {
-              // Arama modundaysak önce aramayı kapat
               setState(() {
                 _aramaModu = false;
                 _aramaMetni = "";
                 _aramaController.clear();
               });
             } else {
-              // Değilsek sayfadan çık
               Navigator.pop(context);
             }
           },
         ),
-
         actions: [
-          // 👇 ARAMA BUTONU 👇
           IconButton(
             icon: Icon(_aramaModu ? Icons.close : Icons.search),
             onPressed: () {
               setState(() {
                 if (_aramaModu) {
-                  // Kapatırken temizle
                   _aramaModu = false;
                   _aramaMetni = "";
                   _aramaController.clear();
                 } else {
-                  // Aç
                   _aramaModu = true;
                 }
               });
@@ -130,63 +117,75 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
           ),
         ],
       ),
-
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _eklemeSecenekleriniGoster(context),
-        backgroundColor: anaRenk,
-        label: Text(
-          dil.ogrenciEkle,
-          style: const TextStyle(color: Colors.white),
-        ),
-        icon: const Icon(Icons.person_add, color: Colors.white),
-      ),
-
       body: Column(
         children: [
-          // 1. İSTATİSTİK KARTI (Arama yaparken gizlemek istersen if(!_aramaModu) içine alabilirsin)
-          if (!_aramaModu) // Arama yaparken kalabalık yapmasın diye gizledim, istersen bu satırı sil.
+          // 1. HEADER (Minimal Tasarım)
+          if (!_aramaModu)
             Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [anaRenk, anaRenk.withOpacity(0.8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
+                color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: anaRenk.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
+                    color: Colors.grey.shade200,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _istatistikKutusu(
-                    "Toplam",
-                    toplamOgrenci.toString(),
-                    Colors.white,
+                  // İstatistikler
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Toplam ${tumOgrenciler.length} Öğrenci",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _cinsiyetEtiketi("Kız: $kizSayisi", Colors.pink),
+                            const SizedBox(width: 8),
+                            _cinsiyetEtiketi(
+                              "Erkek: $erkekSayisi",
+                              Colors.blue,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  _istatistikKutusuIconlu(
-                    Icons.male,
-                    erkekSayisi.toString(),
-                    Colors.blue.shade100,
-                  ),
-                  _istatistikKutusuIconlu(
-                    Icons.female,
-                    kizSayisi.toString(),
-                    Colors.pink.shade100,
+
+                  // Hızlı Ekleme Butonu (Sağ üstte)
+                  ElevatedButton.icon(
+                    onPressed: () => _eklemeSecenekleriniGoster(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: anaRenk,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.add, size: 20),
+                    label: const Text("Öğrenci Ekle"),
                   ),
                 ],
               ),
             ),
 
-          // 2. ÖĞRENCİ LİSTESİ (Filtrelenmiş Liste)
+          // 2. ÖĞRENCİ LİSTESİ
           Expanded(
             child: goruntulenenListe.isEmpty
                 ? Center(
@@ -196,48 +195,46 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                         Icon(
                           _aramaMetni.isEmpty
                               ? Icons.school_outlined
-                              : Icons
-                                    .search_off, // Arama sonucu boşsa farklı ikon
-                          size: 80,
+                              : Icons.search_off,
+                          size: 70,
                           color: Colors.grey.shade300,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
                         Text(
                           _aramaMetni.isEmpty
-                              ? dil.ogrenciMevcutDegil
-                              : "Sonuç bulunamadı.",
-                          style: TextStyle(color: Colors.grey.shade600),
+                              ? "Henüz öğrenci yok"
+                              : "Sonuç bulunamadı",
+                          style: TextStyle(color: Colors.grey.shade500),
                         ),
                       ],
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 80),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                     itemCount: goruntulenenListe.length,
                     itemBuilder: (context, index) {
-                      final ogrenci =
-                          goruntulenenListe[index]; // Filtrelenmiş listeden al
+                      final ogrenci = goruntulenenListe[index];
                       final bool isKiz = ogrenci.cinsiyet == 'Kız';
-
                       final renk = isKiz ? Colors.pink : Colors.blue;
-                      final arkaPlan = isKiz
-                          ? Colors.pink.shade50
-                          : Colors.blue.shade50;
-                      final cerceve = isKiz
-                          ? Colors.pink.shade100
-                          : Colors.blue.shade100;
 
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
+                        margin: const EdgeInsets.only(bottom: 10),
                         decoration: BoxDecoration(
-                          color: arkaPlan,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: cerceve, width: 1.5),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.shade100,
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
+                            horizontal: 12,
+                            vertical: 4,
                           ),
                           leading: SizedBox(
                             width: 55,
@@ -248,15 +245,15 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                                   alignment: Alignment.center,
                                   child: CircleAvatar(
                                     radius: 24,
-                                    backgroundColor: Colors.white,
+                                    backgroundColor: renk.withOpacity(0.1),
                                     backgroundImage: ogrenci.fotoYolu != null
                                         ? FileImage(File(ogrenci.fotoYolu!))
                                         : null,
                                     child: ogrenci.fotoYolu == null
                                         ? Icon(
-                                            isKiz ? Icons.female : Icons.male,
-                                            color: renk.withOpacity(0.5),
-                                            size: 28,
+                                            isKiz ? Icons.face_3 : Icons.face,
+                                            color: renk,
+                                            size: 30,
                                           )
                                         : null,
                                   ),
@@ -265,20 +262,25 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                                   bottom: 0,
                                   left: 0,
                                   child: Container(
-                                    padding: const EdgeInsets.all(4),
+                                    padding: const EdgeInsets.all(5),
                                     decoration: BoxDecoration(
-                                      color: renk,
+                                      color: Colors.white,
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                        color: Colors.white,
-                                        width: 2,
+                                        color: renk.withOpacity(0.5),
+                                        width: 1.5,
                                       ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 2,
+                                        ),
+                                      ],
                                     ),
                                     child: Text(
-                                      // Filtreleme yapıldığı için sıra numarasını listedeki index'e göre veriyoruz
                                       "${index + 1}",
-                                      style: const TextStyle(
-                                        color: Colors.white,
+                                      style: TextStyle(
+                                        color: renk,
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -300,24 +302,43 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                             padding: const EdgeInsets.only(top: 4),
                             child: Row(
                               children: [
-                                Icon(
-                                  Icons.badge,
-                                  size: 16,
-                                  color: Colors.grey.shade600,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    "No: ${ogrenci.numara}",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 8),
                                 Text(
-                                  "No: ${ogrenci.numara}",
-                                  style: TextStyle(color: Colors.grey.shade600),
+                                  isKiz ? "Kız" : "Erkek",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: renk,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            color: Colors.red.shade400,
+                            icon: Icon(
+                              Icons.more_vert,
+                              color: Colors.grey.shade400,
+                            ),
                             onPressed: () =>
-                                _silmeOnayiGoster(context, ogrenci.id!, dil),
+                                _ogrenciIslemMenusuGoster(context, ogrenci),
                           ),
                           onTap: () {
                             Navigator.push(
@@ -339,68 +360,32 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
     );
   }
 
-  Widget _istatistikKutusu(String baslik, String sayi, Color renk) {
-    return Column(
-      children: [
-        Text(
-          baslik,
-          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+  Widget _cinsiyetEtiketi(String yazi, Color renk) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: renk.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        yazi,
+        style: TextStyle(
+          color: renk,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
         ),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            sayi,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _istatistikKutusuIconlu(
-    IconData icon,
-    String sayi,
-    Color arkaPlanRengi,
-  ) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white.withOpacity(0.8), size: 20),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: arkaPlanRengi.withOpacity(0.3),
-            shape: BoxShape.circle,
-          ),
-          child: Text(
-            sayi,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _eklemeSecenekleriniGoster(BuildContext context) {
+  // --- GÜNCELLENEN KISIM BURASI ---
+  void _eklemeSecenekleriniGoster(BuildContext anaContext) {
     showModalBottomSheet(
-      context: context,
+      context: anaContext,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -416,13 +401,25 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
+
+                // 1. ELLE EKLE
                 ListTile(
-                  leading: const Icon(Icons.edit, color: Colors.blue),
-                  title: const Text('Elle Ekle'),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.edit, color: Colors.blue),
+                  ),
+                  title: const Text(
+                    'Elle Ekle',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   onTap: () {
-                    Navigator.pop(context);
+                    Navigator.pop(sheetContext);
                     Navigator.push(
-                      context,
+                      anaContext,
                       MaterialPageRoute(
                         builder: (context) => OgrenciEkleSayfasi(
                           varsayilanSinifId: widget.sinif.id,
@@ -431,19 +428,88 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                     );
                   },
                 ),
+
+                const SizedBox(height: 10),
+
+                // 2. EXCEL'DEN ÇEK (YENİ EKLENEN BUTON)
                 ListTile(
-                  leading: const Icon(
-                    Icons.picture_as_pdf,
-                    color: Colors.orange,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50, // Excel Yeşili
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.table_view, // Excel İkonu
+                      color: Colors.green,
+                    ),
                   ),
-                  title: const Text('PDF\'ten Çek (e-Okul)'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("PDF modülü bir sonraki adımda!"),
+                  title: const Text(
+                    "Excel'den Çek (Önerilen)",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(".xlsx dosyası yükle"),
+                  onTap: () async {
+                    Navigator.pop(sheetContext); // Menüyü kapat
+                    // Seçili sınıf adını ve id'sini Excel ekranına gönder
+                    Navigator.push(
+                      anaContext,
+                      MaterialPageRoute(
+                        builder: (context) => ExcelPreviewEditPage(
+                          sinifAdi: widget.sinif.sinifAdi,
+                          sinifId: widget.sinif.id,
+                        ),
                       ),
                     );
+                  },
+                ),
+
+                const SizedBox(height: 10),
+
+                // 3. PDF'TEN ÇEK
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.picture_as_pdf, color: Colors.red),
+                  ),
+                  title: const Text(
+                    "PDF'ten Çek (e-Okul)",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text("Listeyi otomatik yükle"),
+                  onTap: () async {
+                    Navigator.pop(sheetContext);
+
+                    // --- PDF MANTIĞI ---
+                    final pdfDosyasi = await PdfServisi().pdfDosyasiSec();
+                    if (pdfDosyasi != null) {
+                      final bulunanlar = await PdfServisi().ogrencileriAyikla(
+                        pdfDosyasi,
+                        widget.sinif.id!,
+                      );
+                      if (anaContext.mounted) {
+                        if (bulunanlar.isEmpty) {
+                          BildirimAraci.tepeHataGoster(
+                            anaContext,
+                            "Öğrenci bulunamadı!",
+                          );
+                        } else {
+                          Navigator.push(
+                            anaContext,
+                            MaterialPageRoute(
+                              builder: (context) => PdfOnizlemeSayfasi(
+                                bulunanListe: bulunanlar,
+                                sinifId: widget.sinif.id!,
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                    }
                   },
                 ),
               ],
@@ -454,20 +520,51 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
     );
   }
 
-  void _silmeOnayiGoster(
-    BuildContext context,
-    int ogrenciId,
-    AppLocalizations dil,
-  ) {
+  void _ogrenciIslemMenusuGoster(BuildContext context, dynamic ogrenci) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit, color: Colors.blue),
+              title: const Text("Düzenle"),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        OgrenciEkleSayfasi(duzenlenecekOgrenci: ogrenci),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text("Öğrenciyi Sil"),
+              onTap: () {
+                Navigator.pop(context);
+                _silmeOnayiGoster(context, ogrenci.id!);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _silmeOnayiGoster(BuildContext context, int ogrenciId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(dil.ogrenciSil),
-        content: Text(dil.ogrenciSilOnay),
+        title: const Text("Öğrenciyi Sil"),
+        content: const Text("Bu öğrenciyi silmek istediğinize emin misiniz?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(dil.iptal),
+            child: const Text("İptal"),
           ),
           TextButton(
             onPressed: () {
@@ -477,7 +574,7 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
               Navigator.pop(context);
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(dil.ogrenciSil),
+            child: const Text("Sil"),
           ),
         ],
       ),

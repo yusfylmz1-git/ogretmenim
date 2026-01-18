@@ -3,9 +3,9 @@ import 'package:ogretmenim/veri/modeller/ogrenci_model.dart';
 import 'package:ogretmenim/veri/veritabani/veritabani_yardimcisi.dart';
 
 final ogrencilerProvider =
-    StateNotifierProvider<OgrencilerNotifier, List<OgrenciModel>>((ref) {
-      return OgrencilerNotifier();
-    });
+    StateNotifierProvider<OgrencilerNotifier, List<OgrenciModel>>(
+      (ref) => OgrencilerNotifier(),
+    );
 
 class OgrencilerNotifier extends StateNotifier<List<OgrenciModel>> {
   OgrencilerNotifier() : super([]);
