@@ -1,47 +1,66 @@
 import 'package:flutter/material.dart';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/date_symbol_data_local.dart';
-
-// 👇 DİL DESTEĞİ İÇİN GEREKLİ KÜTÜPHANELER
-import 'package:ogretmenim/gen_l10n/app_localizations.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-
 import 'package:ogretmenim/ozellikler/giris/ana_sayfa.dart';
+import 'package:ogretmenim/gen_l10n/app_localizations.dart';
+import 'package:ogretmenim/ozellikler/giris/giris_ekrani.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Masaüstü platformları için sqflite_common_ffi başlatılıyor
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-  await initializeDateFormatting('tr_TR', null);
-  runApp(const ProviderScope(child: OgretmenimUygulamasi()));
+  await Firebase.initializeApp();
+  runApp(const ProviderScope(child: MyApp()));
 }
 
-final _router = GoRouter(
-  initialLocation: '/',
-  routes: [
-    GoRoute(path: '/', builder: (context, state) => const AnaSayfa()),
-    GoRoute(
-      path: '/excel-preview',
-      builder: (context, state) => const ExcelPreviewPage(),
-    ),
-  ],
-);
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: const AuthGate(),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasData) {
+          return const AnaSayfa();
+        } else {
+          return const GirisEkrani();
+        }
+      },
+    );
+  }
+}
 
 // Öğrenci veri modeli
 class Student {
-  final String number; // Öğrenci no
+  final String number;
   final String name;
   final String surname;
-  final String classroom; // Sınıf (5-A gibi)
+  final String classroom;
   final String gender;
   bool selected;
 
@@ -56,7 +75,6 @@ class Student {
 }
 
 // Excel'den veri çekip öni̇zleme ve sınıf listesine ekleme sayfası
-
 class ExcelPreviewPage extends StatefulWidget {
   const ExcelPreviewPage({Key? key}) : super(key: key);
 
@@ -70,7 +88,6 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
   List<String> excelHeaders = [];
   Map<String, int> headerMapping = {};
 
-  // Otomatik başlık eşleştirme
   Map<String, List<String>> fieldKeywords = {
     'number': ['no', 'numara', 'öğrenci no', 'ogrenci no', 'id', 'tc', 's.no'],
     'name': [
@@ -92,21 +109,18 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
 
   void autoMapHeaders() {
     headerMapping.clear();
-    print('Excel başlıkları: $excelHeaders');
     for (var field in fieldKeywords.keys) {
       for (int i = 0; i < excelHeaders.length; i++) {
         String header = excelHeaders[i].toLowerCase().replaceAll(' ', '');
         for (var keyword in fieldKeywords[field]!) {
           if (header.contains(keyword.replaceAll(' ', ''))) {
             headerMapping[field] = i;
-            print('Eşleşen başlık: $field -> ${excelHeaders[i]} (index $i)');
             break;
           }
         }
         if (headerMapping.containsKey(field)) break;
       }
     }
-    print('Header mapping sonucu: $headerMapping');
   }
 
   Future<void> pickAndReadExcel() async {
@@ -126,11 +140,7 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
               .map((cell) => cell?.value.toString() ?? '')
               .toList();
           autoMapHeaders();
-          print('Toplam veri satırı: ${rows.length - 1}');
           for (var row in rows.skip(1)) {
-            print(
-              'Satır: ${row.map((c) => c?.value.toString() ?? '').toList()}',
-            );
             String number = headerMapping.containsKey('number')
                 ? row[headerMapping['number']!]?.value.toString() ?? ''
                 : '';
@@ -139,7 +149,6 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
             if (headerMapping.containsKey('name')) {
               var nameCell =
                   row[headerMapping['name']!]?.value.toString() ?? '';
-              // isim soyisim birleşik ise ayır
               var parts = nameCell.split(RegExp(r'\s+'));
               if (parts.length > 1) {
                 name = parts.sublist(0, parts.length - 1).join(' ');
@@ -157,9 +166,6 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
             String gender = headerMapping.containsKey('gender')
                 ? row[headerMapping['gender']!]?.value.toString() ?? ''
                 : '';
-            print(
-              'Çekilen: no=$number, ad=$name, soyad=$surname, sınıf=$classroom, cinsiyet=$gender',
-            );
             if (number.isNotEmpty && !usedNumbers.contains(number)) {
               tempStudents.add(
                 Student(
@@ -175,7 +181,6 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
           }
         }
       }
-      print('Toplam öğrenci: ${tempStudents.length}');
       setState(() {
         students = tempStudents;
       });
@@ -279,38 +284,6 @@ class _ExcelPreviewPageState extends State<ExcelPreviewPage> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class OgretmenimUygulamasi extends StatelessWidget {
-  const OgretmenimUygulamasi({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    // 👇 ARADIĞIN KISIM BURASI
-    return MaterialApp.router(
-      title: 'Öğretmenim Asistanı',
-      debugShowCheckedModeBanner: false,
-      routerConfig: _router,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-        fontFamily: GoogleFonts.roboto().fontFamily,
-      ),
-
-      // 👇 EKLEMEN GEREKEN DİL AYARLARI BURADA
-      localizationsDelegates: [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('tr'), // Türkçe
-        Locale('en'), // İngilizce
-      ],
-      locale: const Locale('tr'), // Uygulama Türkçe açılsın
     );
   }
 }

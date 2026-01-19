@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "996169925842",
+    "project_id": "ogretmenim-56",
+    "storage_bucket": "ogretmenim-56.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:996169925842:android:25e7ad398d0a612813190b",
+        "android_client_info": {
+          "package_name": "com.example.ogretmenim"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "996169925842-0o0jo7g99lduh8pftfbs82iq6j8hptfj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ogretmenim",
+            "certificate_hash": "5dc4f1624b88db10bbaf758babefc61709b12602"
+          }
+        },
+        {
+          "client_id": "996169925842-r4omc2pcvimmcic6olc1bqscov7hkm8d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyl0bXs2YgbqYHWfMUg22bkTrDT4joKD0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "996169925842-r4omc2pcvimmcic6olc1bqscov7hkm8d.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
