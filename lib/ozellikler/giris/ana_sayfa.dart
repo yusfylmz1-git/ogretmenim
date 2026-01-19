@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:ogretmenim/gen_l10n/app_localizations.dart';
 // 👇 1. DEĞİŞİKLİK BURADA: Yeni sayfayı import ettik
 import 'package:ogretmenim/ozellikler/siniflar/siniflar_sayfasi.dart';
+import 'package:ogretmenim/ozellikler/ozet/ozet_sayfasi.dart';
+import 'package:ogretmenim/ozellikler/ders_programi/ders_programi_sayfasi.dart';
 
 class AnaSayfa extends StatefulWidget {
   const AnaSayfa({super.key});
@@ -20,9 +21,9 @@ class _AnaSayfaState extends State<AnaSayfa> {
 
     // Sayfa listesi
     final List<Widget> sayfalar = [
-      const MerkezSayfa(), // 0: Özet
-      const SiniflarSayfasi(), // 1: 👇 2. DEĞİŞİKLİK BURADA: SınıflarSayfasi eklendi
-      Center(child: Text(dil.program)), // 2: Program (Sonra yapılacak)
+      const OzetSayfasi(), // 0: Özet
+      const SiniflarSayfasi(), // 1: Sınıflar
+      const DersProgramiSayfasi(), // 2: Ders Programı
       Center(child: Text(dil.menu)), // 3: Menü
     ];
 
@@ -58,57 +59,4 @@ class _AnaSayfaState extends State<AnaSayfa> {
   }
 }
 
-class MerkezSayfa extends StatelessWidget {
-  const MerkezSayfa({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final dil = AppLocalizations.of(context)!;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          dil.uygulamaBasligi,
-          style: GoogleFonts.roboto(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              dil.hosgeldin,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 20),
-            Container(
-              height: 150,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: Text(
-                  dil.bugunDersProgramiBos,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// MerkezSayfa kaldırıldı. Artık OzetSayfasi kullanılacak.
