@@ -9,21 +9,42 @@ class DersProgramiSayfasi extends StatelessWidget {
     final dil = AppLocalizations.of(context)!;
     final anaRenk = Theme.of(context).primaryColor;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          dil.program,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            letterSpacing: 1,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(100),
+        child: AppBar(
+          backgroundColor: anaRenk,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(35)),
           ),
-        ),
-        centerTitle: true,
-        backgroundColor: anaRenk,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
+          toolbarHeight: 100,
+          titleSpacing: 0,
+          title: Padding(
+            padding: const EdgeInsets.only(
+              left: 24.0,
+              right: 0,
+              top: 12,
+              bottom: 0,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    dil.program,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 28,
+                      letterSpacing: -0.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          centerTitle: false,
         ),
       ),
       backgroundColor: Colors.grey.shade50,

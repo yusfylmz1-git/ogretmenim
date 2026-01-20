@@ -50,43 +50,58 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
     // ----------------------------
 
     return Scaffold(
-      // 👇 GÜNCELLENEN MODERN APPBAR 👇
-      appBar: AppBar(
-        title: Text(
-          dil.siniflar,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            letterSpacing: 1, // Harf aralığını biraz açtık
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(100),
+        child: AppBar(
+          backgroundColor: anaRenk,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(35)),
           ),
-        ),
-        centerTitle: true,
-        backgroundColor: anaRenk, // Ana renk yaptık
-        foregroundColor: Colors.white, // Yazı rengi beyaz
-        elevation: 0,
-        // Alt kavis (Modern Görünüm)
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(25)),
-        ),
-        // Sağ üstteki EKLE butonu
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2), // Hafif transparan kutu
-              shape: BoxShape.circle,
+          toolbarHeight: 100,
+          titleSpacing: 0,
+          title: Padding(
+            padding: const EdgeInsets.only(
+              left: 24.0,
+              right: 0,
+              top: 12,
+              bottom: 0,
             ),
-            child: IconButton(
-              icon: const Icon(Icons.add, color: Colors.white),
-              onPressed: () => _sinifIslemMenusuAc(context, dil, null),
-              tooltip: dil.sinifEkle,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    dil.siniflar,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 28,
+                      letterSpacing: -0.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    onPressed: () => _sinifIslemMenusuAc(context, dil, null),
+                    tooltip: dil.sinifEkle,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-        // Alt boşluk (Listenin tepesi sıkışmasın diye)
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(20.0),
-          child: SizedBox(),
+          centerTitle: false,
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(20.0),
+            child: SizedBox(),
+          ),
         ),
       ),
 

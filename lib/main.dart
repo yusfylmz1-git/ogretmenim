@@ -30,6 +30,7 @@ class MyApp extends StatelessWidget {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: const AuthGate(),
+      title: "Öğretmen Asistanı",
     );
   }
 }

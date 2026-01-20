@@ -14,18 +14,83 @@ class GirisEkrani extends StatefulWidget {
 class _GirisEkraniState extends State<GirisEkrani> {
   bool _loading = false;
   String? _hataMesaji;
-  bool _kvkkOnay = true;
+  bool _kvkkOnay = false;
 
-  // --- GÖRSELDEKİYLE AYNI MODERN DARK BOTTOM SHEET ---
+  // --- ÜSTTEN İNEN MODERN UYARI ---
+  void _usttenUyariGoster(BuildContext context, String mesaj) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                mesaj,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFE11D48),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 100,
+          left: 20,
+          right: 20,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // --- KVKK ÖNİZLEME PENCERESİ (Altı çizgisiz metin için tetikleyici) ---
+  void _kvkkOnizlemeGoster(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'KVKK ve Gizlilik Sözleşmesi',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Bu sözleşme, kişisel verilerinizin nasıl işlendiğini ve korunduğunu açıklamaktadır...\n\n'
+            '1. Veri Sorumlusu: Öğretmen Asistanı Ekibi\n'
+            '2. İşlenen Veriler: Google Profil Bilgileri\n'
+            '3. Amaç: Uygulama içi senkronizasyon ve kullanıcı deneyimi geliştirme.\n\n'
+            'Verileriniz asla üçüncü taraflarla paylaşılmaz.',
+            style: TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'ANLADIM',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2070A3),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- ÇIKIŞ ONAY PANELİ (YAPI KREDİ STİLİ) ---
   void _cikisOnaySorgusu(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black87, // Arka planı daha koyu karartır
+      barrierColor: Colors.black87,
       builder: (BuildContext context) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF1C1C1E), // Görseldeki koyu antrasit tonu
+            color: Color(0xFF1C1C1E),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(24),
               topRight: Radius.circular(24),
@@ -35,7 +100,6 @@ class _GirisEkraniState extends State<GirisEkrani> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 12),
-              // Üstteki gri tutamaç (Handle)
               Container(
                 width: 45,
                 height: 4,
@@ -45,7 +109,6 @@ class _GirisEkraniState extends State<GirisEkrani> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Tıklanabilir "Çıkış Yap" Yazısı (Görseldeki gibi turuncu-kırmızı tonu)
               InkWell(
                 onTap: () => exit(0),
                 child: const Padding(
@@ -55,16 +118,14 @@ class _GirisEkraniState extends State<GirisEkrani> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w500,
-                      color: Color(0xFFFF453A), // Modern iOS/Banka kırmızısı
+                      color: Color(0xFFFF453A),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 10),
-              // Görseldeki ince ayraç çizgisi
               const Divider(color: Colors.white12, thickness: 1),
               const SizedBox(height: 25),
-              // Oval Vazgeç Butonu (Görseldeki beyaz çerçeveli stadium buton)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: SizedBox(
@@ -74,20 +135,16 @@ class _GirisEkraniState extends State<GirisEkrani> {
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.white, width: 1.2),
-                      shape: const StadiumBorder(), // Görseldeki tam oval yapı
+                      shape: const StadiumBorder(),
                     ),
                     child: const Text(
                       'Vazgeç',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 18),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 35), // Alt navigasyon çubuğu için pay
+              const SizedBox(height: 35),
             ],
           ),
         );
@@ -97,7 +154,10 @@ class _GirisEkraniState extends State<GirisEkrani> {
 
   Future<void> _googleIleGiris() async {
     if (!_kvkkOnay) {
-      setState(() => _hataMesaji = 'Lütfen sözleşmeyi onaylayın.');
+      _usttenUyariGoster(
+        context,
+        'Devam etmek için KVKK metnini onaylamanız gerekir.',
+      );
       return;
     }
     setState(() {
@@ -109,7 +169,6 @@ class _GirisEkraniState extends State<GirisEkrani> {
       if (googleUser == null) {
         setState(() {
           _loading = false;
-          _hataMesaji = 'Giriş iptal edildi.';
         });
         return;
       }
@@ -142,7 +201,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
         backgroundColor: Colors.white,
         body: Stack(
           children: [
-            // --- ARKA PLAN SÜSLEMELERİ ---
+            // Arka Plan Süslemeleri
             Positioned(
               top: -height * 0.1,
               left: -width * 0.2,
@@ -182,7 +241,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
               child: Container(color: Colors.transparent),
             ),
 
-            // --- İÇERİK ---
+            // İçerik (Logo ve Hoş Geldiniz)
             Positioned(
               top: height * 0.12,
               left: 0,
@@ -218,7 +277,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
               ),
             ),
 
-            // --- ALT MAVİ PANEL ---
+            // Alt Mavi Panel
             Positioned(
               bottom: 0,
               left: 0,
@@ -299,7 +358,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
                       ),
                       const SizedBox(height: 20),
 
-                      // KVKK Checkbox
+                      // KVKK Checkbox ve Sade Metin (Çizgi kaldırıldı)
                       Row(
                         children: [
                           Checkbox(
@@ -309,12 +368,16 @@ class _GirisEkraniState extends State<GirisEkrani> {
                             onChanged: (val) =>
                                 setState(() => _kvkkOnay = val!),
                           ),
-                          const Expanded(
-                            child: Text(
-                              'KVKK Aydınlatma Metni ve Gizlilik Sözleşmesini okudum, onaylıyorum.',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 10,
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _kvkkOnizlemeGoster(context),
+                              child: const Text(
+                                'KVKK Aydınlatma Metni ve Gizlilik Sözleşmesini okudum, onaylıyorum.',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 10,
+                                  // decoration: TextDecoration.underline satırı kaldırıldı
+                                ),
                               ),
                             ),
                           ),
