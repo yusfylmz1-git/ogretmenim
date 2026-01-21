@@ -2,6 +2,7 @@ import '../../main.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -22,6 +23,13 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
 
   String _secilenCinsiyet = 'Erkek';
   String? _fotografYolu;
+  bool _yukleniyor = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _profilBilgileriniGetir();
+  }
 
   @override
   void dispose() {
@@ -33,6 +41,90 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
     super.dispose();
   }
 
+  // --- GÜNCELLENMİŞ VALIDASYON MANTIĞI ---
+  String? _ozelDenetleyici(
+    String? value,
+    String alanAdi, {
+    bool rakamYasak = true,
+    bool zorunlu = true,
+  }) {
+    // Eğer alan boşsa ve zorunlu değilse hata döndürme (Opsiyonel alan kontrolü)
+    if ((value == null || value.trim().isEmpty)) {
+      return zorunlu ? '$alanAdi gerekli' : null;
+    }
+
+    // Eğer alan doluysa karakter ve rakam kontrollerini yap
+    if (value.length > 20) return '$alanAdi en fazla 20 karakter olabilir';
+    if (rakamYasak && RegExp(r'[0-9]').hasMatch(value))
+      return '$alanAdi rakam içeremez';
+
+    return null;
+  }
+
+  Future<void> _profilBilgileriniGetir() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance
+          .collection('teachers')
+          .doc(user.uid)
+          .get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _adController.text = data['ad'] ?? '';
+          _soyadController.text = data['soyad'] ?? '';
+          _bransController.text = data['brans'] ?? '';
+          _okulController.text = data['okul'] ?? '';
+          _mudurController.text = data['mudur'] ?? '';
+          _secilenCinsiyet = data['cinsiyet'] ?? 'Erkek';
+          _fotografYolu = data['profilFotoUrl'];
+        });
+      }
+    }
+  }
+
+  Future<void> _profilKaydet() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() => _yukleniyor = true);
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await FirebaseFirestore.instance
+              .collection('teachers')
+              .doc(user.uid)
+              .set({
+                'ad': _adController.text.trim(),
+                'soyad': _soyadController.text.trim(),
+                'brans': _bransController.text.trim(),
+                'okul': _okulController.text.trim(),
+                'mudur': _mudurController.text.trim(),
+                'cinsiyet': _secilenCinsiyet,
+                'profilFotoUrl': _fotografYolu,
+                'guncellemeTarihi': FieldValue.serverTimestamp(),
+                // Altyapı: rol ve vip üyelik ekle
+                'rol': 'ogretmen',
+                'vipUye': false,
+              }, SetOptions(merge: true));
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bilgiler başarıyla güncellendi!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Hata oluştu: $e')));
+      } finally {
+        setState(() => _yukleniyor = false);
+      }
+    }
+  }
+
+  // --- RESİM VE OTURUM FONKSİYONLARI ---
   Future<void> _resimSecimPaneliniAc() async {
     showModalBottomSheet(
       context: context,
@@ -59,7 +151,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                 'Fotoğraf Kaynağı',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 10),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
@@ -69,16 +160,12 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                   ),
                   child: const Icon(Icons.camera_alt, color: Colors.purple),
                 ),
-                title: const Text(
-                  'Kamera ile çek',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
+                title: const Text('Kamera ile çek'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _kameradanVeyaGaleridenAl(ImageSource.camera);
                 },
               ),
-              const Divider(indent: 70, endIndent: 20),
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
@@ -88,10 +175,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                   ),
                   child: const Icon(Icons.photo_library, color: Colors.orange),
                 ),
-                title: const Text(
-                  'Galeriden seç',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
+                title: const Text('Galeriden seç'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _kameradanVeyaGaleridenAl(ImageSource.gallery);
@@ -175,7 +259,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // --- ÜST PROFİL FOTOĞRAF ALANI ---
+            // --- PROFİL FOTO ALANI ---
             Container(
               width: double.infinity,
               padding: const EdgeInsets.only(bottom: 40),
@@ -210,34 +294,17 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                       ),
                       child: Builder(
                         builder: (context) {
-                          final user = FirebaseAuth.instance.currentUser;
                           final googlePhoto = user?.photoURL;
-                          final mail = user?.email;
                           if (googlePhoto != null && googlePhoto.isNotEmpty) {
                             return CircleAvatar(
                               radius: 65,
-                              backgroundColor: Colors.grey.shade200,
                               backgroundImage: NetworkImage(googlePhoto),
                             );
                           } else if (_fotografYolu != null &&
                               File(_fotografYolu!).existsSync()) {
                             return CircleAvatar(
                               radius: 65,
-                              backgroundColor: Colors.grey.shade200,
                               backgroundImage: FileImage(File(_fotografYolu!)),
-                            );
-                          } else if (mail != null && mail.isNotEmpty) {
-                            return CircleAvatar(
-                              radius: 65,
-                              backgroundColor: Colors.grey.shade200,
-                              child: Text(
-                                mail[0].toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 40,
-                                  color: Colors.black54,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
                             );
                           } else {
                             return CircleAvatar(
@@ -280,7 +347,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
               ),
             ),
 
-            // --- FORM ALANI ---
             Transform.translate(
               offset: const Offset(0, -20),
               child: Padding(
@@ -319,15 +385,16 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                               controller: _adController,
                               label: 'Ad',
                               icon: Icons.person_outline,
+                              validator: (v) => _ozelDenetleyici(v, "Ad"),
                             ),
                             const SizedBox(height: 15),
                             _customTextField(
                               controller: _soyadController,
                               label: 'Soyad',
                               icon: Icons.person_outline,
+                              validator: (v) => _ozelDenetleyici(v, "Soyad"),
                             ),
                             const SizedBox(height: 15),
-                            // Cinsiyet Seçimi
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -347,19 +414,18 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                                       child: DropdownButton<String>(
                                         value: _secilenCinsiyet,
                                         isExpanded: true,
-                                        items: ['Erkek', 'Kadın'].map((
-                                          String value,
-                                        ) {
-                                          return DropdownMenuItem<String>(
-                                            value: value,
-                                            child: Text(value),
-                                          );
-                                        }).toList(),
-                                        onChanged: (newValue) {
-                                          setState(() {
-                                            _secilenCinsiyet = newValue!;
-                                          });
-                                        },
+                                        items: ['Erkek', 'Kadın']
+                                            .map(
+                                              (String value) =>
+                                                  DropdownMenuItem(
+                                                    value: value,
+                                                    child: Text(value),
+                                                  ),
+                                            )
+                                            .toList(),
+                                        onChanged: (newValue) => setState(
+                                          () => _secilenCinsiyet = newValue!,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -369,10 +435,8 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 20),
-
-                      // MESLEKİ BİLGİLER KARTI
+                      // MESLEKİ BİLGİLER KARTI (Opsiyonel Alanlar)
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -400,49 +464,35 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                             const SizedBox(height: 15),
                             _customTextField(
                               controller: _bransController,
-                              label: 'Branş',
+                              label: 'Branş (İsteğe Bağlı)',
                               icon: Icons.work_outline,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty)
-                                  return 'Branş gerekli';
-                                if (value.length < 2)
-                                  return 'Branş adı çok kısa';
-                                return null;
-                              },
+                              validator: (v) =>
+                                  _ozelDenetleyici(v, "Branş", zorunlu: false),
                             ),
                             const SizedBox(height: 15),
                             _customTextField(
                               controller: _okulController,
-                              label: 'Okul',
+                              label: 'Okul (İsteğe Bağlı)',
                               icon: Icons.school_outlined,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty)
-                                  return 'Okul gerekli';
-                                if (value.length < 2)
-                                  return 'Okul adı çok kısa';
-                                return null;
-                              },
+                              validator: (v) => _ozelDenetleyici(
+                                v,
+                                "Okul",
+                                rakamYasak: false,
+                                zorunlu: false,
+                              ),
                             ),
                             const SizedBox(height: 15),
                             _customTextField(
                               controller: _mudurController,
-                              label: 'Müdür',
+                              label: 'Müdür (İsteğe Bağlı)',
                               icon: Icons.account_box_outlined,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty)
-                                  return 'Müdür adı gerekli';
-                                if (value.length < 2)
-                                  return 'Müdür adı çok kısa';
-                                return null;
-                              },
+                              validator: (v) =>
+                                  _ozelDenetleyici(v, "Müdür", zorunlu: false),
                             ),
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 25),
-
-                      // GİRİŞ YAPILAN MAİL
                       if (user != null) ...[
                         Container(
                           width: double.infinity,
@@ -456,13 +506,11 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                             children: [
                               const Icon(Icons.email, color: Colors.grey),
                               const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  user.email ?? '',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
+                              Text(
+                                user.email ?? '',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
                               ),
                             ],
@@ -491,33 +539,33 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                         ),
                         const SizedBox(height: 16),
                       ],
-
-                      // KAYDET BUTONU
                       SizedBox(
                         width: double.infinity,
                         height: 55,
                         child: ElevatedButton(
-                          onPressed: () {},
+                          onPressed: _yukleniyor ? null : _profilKaydet,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _secilenCinsiyet == 'Kadın'
                                 ? const Color(0xFFD81B60)
                                 : Colors.indigo,
                             foregroundColor: Colors.white,
-                            elevation: 5,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
                           ),
-                          child: const Text(
-                            'KAYDET',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _yukleniyor
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : const Text(
+                                  'KAYDET',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ),
-
                       const SizedBox(height: 30),
                     ],
                   ),
@@ -566,13 +614,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
           ),
         ),
       ),
-      validator:
-          validator ??
-          (value) {
-            if (value == null || value.trim().isEmpty) return '$label gerekli';
-            if (value.length < 2) return '$label çok kısa';
-            return null;
-          },
+      validator: validator,
     );
   }
 }

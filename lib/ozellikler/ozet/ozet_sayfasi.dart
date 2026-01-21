@@ -2,193 +2,169 @@ import 'package:flutter/material.dart';
 import 'package:ogretmenim/gen_l10n/app_localizations.dart';
 import '../profil/profil_ayarlari.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart';
 
 class OzetSayfasi extends StatelessWidget {
   const OzetSayfasi({super.key});
 
+  // Renkleri butonlara göre koyulaştıran yardımcı fonksiyon
+  Color _rengiKarart(Color color, [double miktar = 0.3]) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withLightness((hsl.lightness - miktar).clamp(0.0, 1.0))
+        .toColor();
+  }
+
   @override
   Widget build(BuildContext context) {
     final dil = AppLocalizations.of(context)!;
-    final anaRenk = Theme.of(context).primaryColor;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
+    return ProjeSayfaSablonu(
+      // 1. ÜST KISIM: Profil ve Hoş geldin Yazısı
+      baslikWidget: _profilBaslikWidget(context, dil),
+
+      // 2. AKSİYONLAR: Bildirim İkonu (Siyah detaylı ve kontrastlı)
+      aksiyonlar: [
+        Container(
+          margin: const EdgeInsets.only(right: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black.withOpacity(0.1)),
+          ),
+          child: IconButton(
+            icon: const Icon(
+              Icons.notifications_none_rounded,
+              color: Color(0xFF1E293B), // Siyaha yakın koyu renk
+              size: 24,
+            ),
+            onPressed: () {},
+          ),
+        ),
+      ],
+
+      // 3. ANA İÇERİK
+      icerik: ListView(
+        shrinkWrap: true,
+        physics:
+            const NeverScrollableScrollPhysics(), // Şablonun kaydırmasını kullanır
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          20,
+          16,
+          80,
+        ), // Milimetrik hizalama için sabit
         children: [
-          // --- MODERN APPBAR (Beyaz Çerçeveli Profil) ---
-          Container(
-            decoration: BoxDecoration(
-              color: anaRenk,
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(35),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: anaRenk.withOpacity(0.15),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.only(
-              top: 50,
-              bottom: 25,
-              left: 20,
-              right: 20,
-            ),
-            child: Row(
-              children: [
-                // Modern beyaz çerçeveli profil fotoğrafı
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ProfilAyarlariSayfasi(),
-                      ),
-                    );
-                  },
-                  child: Hero(
-                    tag: 'profil_avatar',
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: _profilFotoBuilder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 15),
-                // Hoş geldiniz alanı
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        dil.hosgeldin,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const Text(
-                        "Uygulamanız bugün için hazır.",
-                        style: TextStyle(
-                          color: Color(0xFFE0E7EF),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Sağ üst bildirim ikonu
-                IconButton(
-                  icon: const Icon(
-                    Icons.notifications_none_rounded,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                  onPressed: () {},
-                ),
-              ],
-            ),
-          ),
-
-          // --- ANA İÇERİK ALANI ---
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // --- İŞLEM BUTONLARI ---
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 18,
-                    crossAxisSpacing: 18,
-                    childAspectRatio: 1.15,
-                    children: [
-                      _islemButonu(
-                        context,
-                        "Ders İçi Katılım",
-                        Icons.how_to_reg_rounded,
-                        const Color(0xFF3B82F6),
-                      ),
-                      _islemButonu(
-                        context,
-                        "Kazanımlar",
-                        Icons.auto_awesome_rounded,
-                        const Color(0xFF10B981),
-                      ),
-                      _islemButonu(
-                        context,
-                        "Evraklarım",
-                        Icons.folder_copy_rounded,
-                        const Color(0xFFFB7185),
-                      ),
-                      _islemButonu(
-                        context,
-                        "Sınav Analizi",
-                        Icons.bar_chart_rounded,
-                        const Color(0xFF8B5CF6),
-                      ),
-                      _islemButonu(
-                        context,
-                        "Sınav Takibi",
-                        Icons.event_note_rounded,
-                        const Color(0xFFF59E0B),
-                      ),
-                      _islemButonu(
-                        context,
-                        "Analiz & Rapor",
-                        Icons.analytics_rounded,
-                        const Color(0xFF0EA5E9),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 35),
-
-                  // --- DUYURULAR VE YAKLAŞANLAR (Özet Bölümü) ---
-                  const Text(
-                    "Duyurular ve Yaklaşanlar",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  _duyuruKarti(
-                    "Yaklaşan Sınav",
-                    "8-A Matematik sınavı yarın 2. saatte.",
-                    Icons.notification_important_rounded,
-                    Colors.orange,
-                  ),
-                  _duyuruKarti(
-                    "Genel Duyuru",
-                    "Zümre toplantısı Cuma günü saat 15:30'da.",
-                    Icons.campaign_rounded,
-                    const Color(0xFF3B82F6),
-                  ),
-                  const SizedBox(height: 30),
-                ],
-              ),
-            ),
-          ),
+          _islemGridi(context),
+          const SizedBox(height: 35),
+          _duyuruBolumu(),
+          const SizedBox(height: 50),
         ],
       ),
     );
   }
 
-  // --- MODERN İŞLEM BUTONU ---
+  // --- PROFİL BAŞLIK ALANI (Tasarım Bütünlüğü İçin Sabitlendi) ---
+  Widget _profilBaslikWidget(BuildContext context, AppLocalizations dil) {
+    final user = FirebaseAuth.instance.currentUser;
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ProfilAyarlariSayfasi(),
+            ),
+          ),
+          child: CircleAvatar(
+            radius: 22, // Sabitlendi (Sınıflar sayfasıyla aynı)
+            backgroundColor: Colors.white,
+            backgroundImage: (user?.photoURL != null)
+                ? NetworkImage(user!.photoURL!)
+                : null,
+            child: (user?.photoURL == null)
+                ? const Icon(Icons.person, color: Colors.grey)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              dil.hosgeldin,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+            const Text(
+              "Bugün nasılsınız?",
+              style: TextStyle(
+                color: Colors.black54,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // --- ANA İŞLEM BUTONLARI (GRID) ---
+  Widget _islemGridi(BuildContext context) {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.zero,
+      mainAxisSpacing: 18,
+      crossAxisSpacing: 18,
+      childAspectRatio: 1.15,
+      children: [
+        _islemButonu(
+          context,
+          "Ders İçi Katılım",
+          Icons.how_to_reg_rounded,
+          const Color(0xFF3B82F6),
+        ),
+        _islemButonu(
+          context,
+          "Kazanımlar",
+          Icons.auto_awesome_rounded,
+          const Color(0xFF10B981),
+        ),
+        _islemButonu(
+          context,
+          "Evraklarım",
+          Icons.folder_copy_rounded,
+          const Color(0xFFFB7185),
+        ),
+        _islemButonu(
+          context,
+          "Sınav Analizi",
+          Icons.bar_chart_rounded,
+          const Color(0xFF8B5CF6),
+        ),
+        _islemButonu(
+          context,
+          "Sınav Takibi",
+          Icons.event_note_rounded,
+          const Color(0xFFF59E0B),
+        ),
+        _islemButonu(
+          context,
+          "Analiz & Rapor",
+          Icons.analytics_rounded,
+          const Color(0xFF0EA5E9),
+        ),
+      ],
+    );
+  }
+
   Widget _islemButonu(
     BuildContext context,
     String baslik,
@@ -198,54 +174,40 @@ class OzetSayfasi extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [renk.withOpacity(0.18), renk.withOpacity(0.85)],
+          colors: [renk.withOpacity(0.15), renk.withOpacity(0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: renk.withOpacity(0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: renk.withOpacity(0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(24),
           onTap: () {},
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: renk.withOpacity(0.10),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Center(child: Icon(ikon, color: renk, size: 44)),
+              CircleAvatar(
+                backgroundColor: Colors.white,
+                radius: 28,
+                child: Icon(ikon, color: renk, size: 32),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
                 baslik,
                 textAlign: TextAlign.center,
-                maxLines: 2,
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                  color: renk.darken(0.25),
-                  letterSpacing: -0.2,
-                  height: 1.13,
+                  fontSize: 12,
+                  color: _rengiKarart(renk, 0.4),
                 ),
               ),
             ],
@@ -255,7 +217,36 @@ class OzetSayfasi extends StatelessWidget {
     );
   }
 
-  // --- DUYURU KARTI ---
+  // --- DUYURU BÖLÜMÜ ---
+  Widget _duyuruBolumu() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Duyurular ve Yaklaşanlar",
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        const SizedBox(height: 15),
+        _duyuruKarti(
+          "Yaklaşan Sınav",
+          "8-A Matematik sınavı yarın 2. saatte.",
+          Icons.notification_important_rounded,
+          Colors.orange,
+        ),
+        _duyuruKarti(
+          "Genel Duyuru",
+          "Zümre toplantısı Cuma günü saat 15:30'da.",
+          Icons.campaign_rounded,
+          const Color(0xFF3B82F6),
+        ),
+      ],
+    );
+  }
+
   Widget _duyuruKarti(String baslik, String icerik, IconData ikon, Color renk) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -263,12 +254,9 @@ class OzetSayfasi extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade100),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
         ],
       ),
       child: Row(
@@ -279,7 +267,7 @@ class OzetSayfasi extends StatelessWidget {
               color: renk.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(ikon, color: renk, size: 24),
+            child: Icon(ikon, color: renk, size: 22),
           ),
           const SizedBox(width: 15),
           Expanded(
@@ -290,18 +278,12 @@ class OzetSayfasi extends StatelessWidget {
                   baslik,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Color(0xFF1E293B),
+                    fontSize: 14,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   icerik,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                    height: 1.3,
-                  ),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
@@ -309,39 +291,5 @@ class OzetSayfasi extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  // --- PROFİL FOTOĞRAFI YARDIMCISI ---
-  Widget _profilFotoBuilder() {
-    final user = FirebaseAuth.instance.currentUser;
-    final googlePhoto = user?.photoURL;
-    final mail = user?.email;
-
-    return CircleAvatar(
-      radius: 34,
-      backgroundColor: const Color(0xFFF1F5F9),
-      backgroundImage: (googlePhoto != null && googlePhoto.isNotEmpty)
-          ? NetworkImage(googlePhoto)
-          : null,
-      child: (googlePhoto == null || googlePhoto.isEmpty)
-          ? Text(
-              mail != null ? mail[0].toUpperCase() : "A",
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black54,
-              ),
-            )
-          : null,
-    );
-  }
-}
-
-// Renk koyulaştırıcı extension
-extension ColorBrightness on Color {
-  Color darken([double amount = .1]) {
-    final hsl = HSLColor.fromColor(this);
-    final hslDark = hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0));
-    return hslDark.toColor();
   }
 }
