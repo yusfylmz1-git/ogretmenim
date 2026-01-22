@@ -1,25 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-// --- MERKEZİ TEMA YÖNETİMİ ---
 class ProjeTemasi {
-  static bool get kadinKullaniciMi {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return false;
-    return false; // Test için manuel değiştirilebilir
+  // --- 1. TEK BİR DEĞİŞKEN: ERKEK Mİ? ---
+  // Statik olduğu için her yerden ProjeTemasi.erkekMi diye ulaşılır.
+  static bool erkekMi = true;
+
+  // --- 2. HAFIZADAN OKU (Uygulama açılırken çalışır) ---
+  static Future<void> temayiYukle() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Kayıtlı bir şey yoksa varsayılan olarak true (erkek) kabul et
+    erkekMi = prefs.getBool('cinsiyet_erkek') ?? true;
   }
 
-  static List<Color> get gradyanRenkleri => kadinKullaniciMi
-      ? [const Color(0xFFFFF1F6), const Color(0xFFFCE4EC)]
-      : [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)];
+  // --- 3. HAFIZAYA KAYDET (Profilde değiştirince çalışır) ---
+  static Future<void> temayiDegistir(bool yeniDurumErkek) async {
+    erkekMi = yeniDurumErkek;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('cinsiyet_erkek', yeniDurumErkek);
+  }
+
+  // --- 4. RENKLER (Otomatik karar verir) ---
+  static List<Color> get gradyanRenkleri => erkekMi
+      ? [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)] // Mavi Tonlar
+      : [const Color(0xFFFFF1F6), const Color(0xFFFCE4EC)]; // Pembe Tonlar
 
   static Color get anaRenk =>
-      kadinKullaniciMi ? const Color(0xFFD81B60) : const Color(0xFF3949AB);
+      erkekMi ? const Color(0xFF3949AB) : const Color(0xFFD81B60);
 
   static Color get arkaPlan => Colors.white;
 }
 
-// --- EVRENSEL SAYFA ŞABLONU ---
+// --- SAYFA ŞABLONU (HATA VERMEYEN STANDART HALİ) ---
 class ProjeSayfaSablonu extends StatelessWidget {
   final String? baslikMetin;
   final Widget? baslikWidget;
@@ -44,15 +56,16 @@ class ProjeSayfaSablonu extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. ÜST GRADIENT PANEL (Daha Kompakt)
+            // ÜST PANEL
             Container(
               width: double.infinity,
-              height: 150, // 180'den 150'ye düşürülerek boşluk azaltıldı
+              height: 150,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: ProjeTemasi.gradyanRenkleri,
+                  colors:
+                      ProjeTemasi.gradyanRenkleri, // Statik değişkenden alır
                 ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(35),
@@ -62,9 +75,7 @@ class ProjeSayfaSablonu extends StatelessWidget {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.only(
-                    top: 10,
-                  ), // İçeriği SafeArea içinde biraz aşağı aldık
+                  padding: const EdgeInsets.only(top: 10),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -79,8 +90,7 @@ class ProjeSayfaSablonu extends StatelessWidget {
                                   Text(
                                     baslikMetin ?? "",
                                     style: const TextStyle(
-                                      fontSize:
-                                          20, // Font biraz küçültülerek modernleşti
+                                      fontSize: 20,
                                       fontWeight: FontWeight.w900,
                                       color: Color(0xFF1E293B),
                                       letterSpacing: -0.5,
@@ -97,13 +107,9 @@ class ProjeSayfaSablonu extends StatelessWidget {
                 ),
               ),
             ),
-
-            // 2. ÜSTE BİNEN İÇERİK (Daha Yukarıda)
+            // İÇERİK
             Transform.translate(
-              offset: const Offset(
-                0,
-                -45,
-              ), // -35'ten -45'e çekilerek boşluk yok edildi
+              offset: const Offset(0, -45),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(

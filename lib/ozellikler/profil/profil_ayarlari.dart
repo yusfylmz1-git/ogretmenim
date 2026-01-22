@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+// Proje Teması Importu (Yolu kontrol et)
+import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart';
 
 class ProfilAyarlariSayfasi extends StatefulWidget {
   const ProfilAyarlariSayfasi({Key? key}) : super(key: key);
@@ -41,23 +43,19 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
     super.dispose();
   }
 
-  // --- GÜNCELLENMİŞ VALIDASYON MANTIĞI ---
+  // --- VALIDASYON ---
   String? _ozelDenetleyici(
     String? value,
     String alanAdi, {
     bool rakamYasak = true,
     bool zorunlu = true,
   }) {
-    // Eğer alan boşsa ve zorunlu değilse hata döndürme (Opsiyonel alan kontrolü)
     if ((value == null || value.trim().isEmpty)) {
       return zorunlu ? '$alanAdi gerekli' : null;
     }
-
-    // Eğer alan doluysa karakter ve rakam kontrollerini yap
     if (value.length > 20) return '$alanAdi en fazla 20 karakter olabilir';
     if (rakamYasak && RegExp(r'[0-9]').hasMatch(value))
       return '$alanAdi rakam içeremez';
-
     return null;
   }
 
@@ -70,15 +68,19 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
           .get();
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
-        setState(() {
-          _adController.text = data['ad'] ?? '';
-          _soyadController.text = data['soyad'] ?? '';
-          _bransController.text = data['brans'] ?? '';
-          _okulController.text = data['okul'] ?? '';
-          _mudurController.text = data['mudur'] ?? '';
-          _secilenCinsiyet = data['cinsiyet'] ?? 'Erkek';
-          _fotografYolu = data['profilFotoUrl'];
-        });
+        if (mounted) {
+          setState(() {
+            _adController.text = data['ad'] ?? '';
+            _soyadController.text = data['soyad'] ?? '';
+            _bransController.text = data['brans'] ?? '';
+            _okulController.text = data['okul'] ?? '';
+            _mudurController.text = data['mudur'] ?? '';
+            _secilenCinsiyet = data['cinsiyet'] ?? 'Erkek';
+            _fotografYolu = data['profilFotoUrl'];
+          });
+          // Açılışta temayı veriye göre senkronize et
+          ProjeTemasi.temayiDegistir(_secilenCinsiyet == 'Erkek');
+        }
       }
     }
   }
@@ -89,6 +91,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
       try {
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
+          // 1. Firebase Kaydı
           await FirebaseFirestore.instance
               .collection('teachers')
               .doc(user.uid)
@@ -101,15 +104,20 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                 'cinsiyet': _secilenCinsiyet,
                 'profilFotoUrl': _fotografYolu,
                 'guncellemeTarihi': FieldValue.serverTimestamp(),
-                // Altyapı: rol ve vip üyelik ekle
                 'rol': 'ogretmen',
                 'vipUye': false,
               }, SetOptions(merge: true));
 
+          // 2. Temayı Güncelle (Statik Çağrı)
+          await ProjeTemasi.temayiDegistir(_secilenCinsiyet == 'Erkek');
+
           if (!mounted) return;
+          // Sayfayı yenile ki renkler değişsin
+          setState(() {});
+
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Bilgiler başarıyla güncellendi!'),
+              content: Text('Bilgiler ve tema güncellendi!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -124,7 +132,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
     }
   }
 
-  // --- RESİM VE OTURUM FONKSİYONLARI ---
   Future<void> _resimSecimPaneliniAc() async {
     showModalBottomSheet(
       context: context,
@@ -230,6 +237,10 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    // RENKLERİ TEMADAN AL (Statik)
+    final gradyan = ProjeTemasi.gradyanRenkleri;
+    final anaRenk = ProjeTemasi.anaRenk;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -249,9 +260,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: _secilenCinsiyet == 'Kadın'
-                  ? [const Color(0xFFFCE4EC), const Color(0xFFF8BBD0)]
-                  : [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)],
+              colors: gradyan, // Tema Rengi
             ),
           ),
         ),
@@ -259,7 +268,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // --- PROFİL FOTO ALANI ---
+            // PROFİL FOTO ALANI
             Container(
               width: double.infinity,
               padding: const EdgeInsets.only(bottom: 40),
@@ -267,9 +276,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: _secilenCinsiyet == 'Kadın'
-                      ? [const Color(0xFFFCE4EC), const Color(0xFFF8BBD0)]
-                      : [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)],
+                  colors: gradyan, // Tema Rengi
                 ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(40),
@@ -295,18 +302,18 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                       child: Builder(
                         builder: (context) {
                           final googlePhoto = user?.photoURL;
-                          if (googlePhoto != null && googlePhoto.isNotEmpty) {
+                          if (googlePhoto != null && googlePhoto.isNotEmpty)
                             return CircleAvatar(
                               radius: 65,
                               backgroundImage: NetworkImage(googlePhoto),
                             );
-                          } else if (_fotografYolu != null &&
-                              File(_fotografYolu!).existsSync()) {
+                          else if (_fotografYolu != null &&
+                              File(_fotografYolu!).existsSync())
                             return CircleAvatar(
                               radius: 65,
                               backgroundImage: FileImage(File(_fotografYolu!)),
                             );
-                          } else {
+                          else
                             return CircleAvatar(
                               radius: 65,
                               backgroundColor: Colors.grey.shade200,
@@ -316,7 +323,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                                 color: Colors.grey.shade400,
                               ),
                             );
-                          }
                         },
                       ),
                     ),
@@ -328,9 +334,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                         child: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: _secilenCinsiyet == 'Kadın'
-                                ? const Color(0xFFD81B60)
-                                : Colors.indigo,
+                            color: anaRenk,
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 3),
                           ),
@@ -355,7 +359,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                   key: _formKey,
                   child: Column(
                     children: [
-                      // KİŞİSEL BİLGİLER KARTI
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -395,6 +398,8 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                               validator: (v) => _ozelDenetleyici(v, "Soyad"),
                             ),
                             const SizedBox(height: 15),
+
+                            // CİNSİYET SEÇİMİ (ANLIK DEĞİŞİM)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -423,9 +428,17 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                                                   ),
                                             )
                                             .toList(),
-                                        onChanged: (newValue) => setState(
-                                          () => _secilenCinsiyet = newValue!,
-                                        ),
+                                        onChanged: (newValue) async {
+                                          if (newValue == null) return;
+                                          // 1. Temayı Değiştir
+                                          await ProjeTemasi.temayiDegistir(
+                                            newValue == 'Erkek',
+                                          );
+                                          // 2. Ekranı Yenile
+                                          setState(() {
+                                            _secilenCinsiyet = newValue;
+                                          });
+                                        },
                                       ),
                                     ),
                                   ),
@@ -435,8 +448,10 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 20),
-                      // MESLEKİ BİLGİLER KARTI (Opsiyonel Alanlar)
+
+                      // MESLEKİ BİLGİLER
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -492,7 +507,9 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 25),
+
                       if (user != null) ...[
                         Container(
                           width: double.infinity,
@@ -539,15 +556,15 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                         ),
                         const SizedBox(height: 16),
                       ],
+
+                      // KAYDET BUTONU
                       SizedBox(
                         width: double.infinity,
                         height: 55,
                         child: ElevatedButton(
                           onPressed: _yukleniyor ? null : _profilKaydet,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _secilenCinsiyet == 'Kadın'
-                                ? const Color(0xFFD81B60)
-                                : Colors.indigo,
+                            backgroundColor: anaRenk, // Tema Rengi
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
@@ -607,9 +624,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: _secilenCinsiyet == 'Kadın'
-                ? const Color(0xFFD81B60)
-                : Colors.indigo,
+            color: ProjeTemasi.anaRenk, // Tema Rengi
             width: 1.5,
           ),
         ),

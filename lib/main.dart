@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
@@ -10,14 +9,25 @@ import 'package:ogretmenim/gen_l10n/app_localizations.dart';
 import 'package:ogretmenim/ozellikler/giris/giris_ekrani.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart'; // Tema Sınıfı
+import 'package:ogretmenim/cekirdek/yoneticiler/program_ayarlari.dart'; // YENİ: Program Ayarları
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Windows/Linux/MacOS için veritabanı ayarı
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
+
   await Firebase.initializeApp();
+
+  // --- AYARLARI YÜKLE ---
+  // Uygulama başlamadan önce tema ve ders saatlerini hafızadan okuyoruz.
+  await ProjeTemasi.temayiYukle();
+  await ProgramAyarlari.ayarlariYukle();
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
@@ -27,6 +37,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false, // Debug yazısını kaldırır
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: const AuthGate(),
@@ -40,7 +51,7 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder(
+    return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -55,6 +66,8 @@ class AuthGate extends StatelessWidget {
     );
   }
 }
+
+// --- BURADAN AŞAĞISI EXCEL İŞLEMLERİ (Öğrenci Aktarımı İçin) ---
 
 // Öğrenci veri modeli
 class Student {
