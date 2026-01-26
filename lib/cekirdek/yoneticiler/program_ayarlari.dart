@@ -2,33 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProgramAyarlari {
-  static TimeOfDay baslangicSaati = const TimeOfDay(hour: 8, minute: 0);
+  // Varsayılan Değerler
+  static TimeOfDay ilkDersSaati = const TimeOfDay(hour: 8, minute: 0);
   static int dersSuresi = 40;
   static int teneffusSuresi = 10;
+  static int gunlukDersSayisi = 8; // YENİ ÖZELLİK
+  static bool ogleArasiVarMi = false; // YENİ ÖZELLİK
+  static int ogleArasiSuresi = 45; // YENİ ÖZELLİK
 
+  // Hafızadan Ayarları Yükle (Uygulama açılırken çalışır)
   static Future<void> ayarlariYukle() async {
     final prefs = await SharedPreferences.getInstance();
-    int hour = prefs.getInt('baslangic_saat') ?? 8;
-    int minute = prefs.getInt('baslangic_dakika') ?? 0;
-    baslangicSaati = TimeOfDay(hour: hour, minute: minute);
-    dersSuresi = prefs.getInt('ders_suresi') ?? 40;
-    teneffusSuresi = prefs.getInt('teneffus_suresi') ?? 10;
-  }
 
-  static Future<void> ayarlariKaydet(
-    TimeOfDay baslangic,
-    int ders,
-    int teneffus,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('baslangic_saat', baslangic.hour);
-    await prefs.setInt('baslangic_dakika', baslangic.minute);
-    await prefs.setInt('ders_suresi', ders);
-    await prefs.setInt('teneffus_suresi', teneffus);
+    // Eski isimlerle (baslangic_saat) çakışmaması için yeni anahtarlar kullandık
+    int hour = prefs.getInt('ilkDersSaatiHour') ?? 8;
+    int minute = prefs.getInt('ilkDersSaatiMinute') ?? 0;
+    ilkDersSaati = TimeOfDay(hour: hour, minute: minute);
 
-    // Değerleri güncelle
-    baslangicSaati = baslangic;
-    dersSuresi = ders;
-    teneffusSuresi = teneffus;
+    dersSuresi = prefs.getInt('dersSuresi') ?? 40;
+    teneffusSuresi = prefs.getInt('teneffusSuresi') ?? 10;
+
+    // Yeni özelliklerin yüklenmesi
+    gunlukDersSayisi = prefs.getInt('gunlukDersSayisi') ?? 8;
+    ogleArasiVarMi = prefs.getBool('ogleArasiVarMi') ?? false;
+    ogleArasiSuresi = prefs.getInt('ogleArasiSuresi') ?? 45;
   }
 }

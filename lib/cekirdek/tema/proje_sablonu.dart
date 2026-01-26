@@ -3,24 +3,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ProjeTemasi {
   // --- 1. TEK BİR DEĞİŞKEN: ERKEK Mİ? ---
-  // Statik olduğu için her yerden ProjeTemasi.erkekMi diye ulaşılır.
   static bool erkekMi = true;
 
-  // --- 2. HAFIZADAN OKU (Uygulama açılırken çalışır) ---
+  // --- 2. HAFIZADAN OKU ---
   static Future<void> temayiYukle() async {
     final prefs = await SharedPreferences.getInstance();
-    // Kayıtlı bir şey yoksa varsayılan olarak true (erkek) kabul et
     erkekMi = prefs.getBool('cinsiyet_erkek') ?? true;
   }
 
-  // --- 3. HAFIZAYA KAYDET (Profilde değiştirince çalışır) ---
+  // --- 3. HAFIZAYA KAYDET ---
   static Future<void> temayiDegistir(bool yeniDurumErkek) async {
     erkekMi = yeniDurumErkek;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('cinsiyet_erkek', yeniDurumErkek);
   }
 
-  // --- 4. RENKLER (Otomatik karar verir) ---
+  // --- 4. RENKLER ---
   static List<Color> get gradyanRenkleri => erkekMi
       ? [const Color(0xFFE3F2FD), const Color(0xFFBBDEFB)] // Mavi Tonlar
       : [const Color(0xFFFFF1F6), const Color(0xFFFCE4EC)]; // Pembe Tonlar
@@ -29,9 +27,40 @@ class ProjeTemasi {
       erkekMi ? const Color(0xFF3949AB) : const Color(0xFFD81B60);
 
   static Color get arkaPlan => Colors.white;
+
+  // --- 5. EKSİK OLAN PARÇA: TEMA VERİSİ (ThemeData) ---
+  // main.dart dosyasının aradığı 'tema' budur.
+  static ThemeData get tema => ThemeData(
+    useMaterial3: true,
+    primaryColor: anaRenk,
+    scaffoldBackgroundColor: arkaPlan,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: anaRenk,
+      primary: anaRenk,
+      surface: Colors.white,
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      centerTitle: true,
+      iconTheme: IconThemeData(color: anaRenk),
+      titleTextStyle: TextStyle(
+        color: anaRenk,
+        fontWeight: FontWeight.bold,
+        fontSize: 20,
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: anaRenk,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    ),
+  );
 }
 
-// --- SAYFA ŞABLONU (HATA VERMEYEN STANDART HALİ) ---
+// --- SAYFA ŞABLONU ---
 class ProjeSayfaSablonu extends StatelessWidget {
   final String? baslikMetin;
   final Widget? baslikWidget;
@@ -64,8 +93,7 @@ class ProjeSayfaSablonu extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors:
-                      ProjeTemasi.gradyanRenkleri, // Statik değişkenden alır
+                  colors: ProjeTemasi.gradyanRenkleri,
                 ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(35),

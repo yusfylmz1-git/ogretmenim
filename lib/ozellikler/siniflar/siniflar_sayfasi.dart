@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // EKLENDİ
 import 'package:ogretmenim/gen_l10n/app_localizations.dart';
 import 'package:ogretmenim/ozellikler/ogrenciler/ogrenciler_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/profil/profil_ayarlari.dart';
 import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart';
-
-// Modeli buraya dahil ediyoruz, eğer ayrı dosyadaysa import kalabilir.
-// Firebase ID'si String olduğu için modeli biraz esneterek kullanacağız.
 import 'package:ogretmenim/veri/modeller/sinif_model.dart';
+import 'siniflar_provider.dart';
 
 class SiniflarSayfasi extends ConsumerStatefulWidget {
   const SiniflarSayfasi({super.key});
@@ -27,7 +24,18 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
     const Color(0xFF63C6FF),
   ];
 
-  // --- FORMATLAMA FONKSİYONU ---
+  final _auth = FirebaseAuth.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sayfa açılırken verileri tazeleyelim (Garanti olsun)
+    Future.microtask(() {
+      ref.read(siniflarProvider.notifier).siniflariYukle();
+    });
+  }
+
+  // --- FORMATLAMA ---
   String _formatla(String giris) {
     String islenen = giris.replaceAll(
       RegExp(r'[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ]+'),
@@ -43,241 +51,148 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
     return islenen.toUpperCase();
   }
 
-  // --- FIREBASE İŞLEMLERİ (EKLEME / GÜNCELLEME / SİLME) ---
-  final _firestore = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
-
-  Future<void> _sinifKaydet(
-    String sinifAdi,
-    String aciklama, {
-    String? docId,
-  }) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final veri = {
-      'ad': sinifAdi, // Ders Programı sayfası bu alanı 'ad' olarak bekliyor
-      'aciklama': aciklama,
-      'olusturulmaTarihi': FieldValue.serverTimestamp(),
-    };
-
-    if (docId == null) {
-      // Yeni Ekleme
-      await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('siniflar')
-          .add(veri);
-    } else {
-      // Güncelleme
-      await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('siniflar')
-          .doc(docId)
-          .update(veri);
-    }
-  }
-
-  Future<void> _sinifSil(String docId) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-    await _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('siniflar')
-        .doc(docId)
-        .delete();
-  }
-
-  // --- ARAYÜZ ---
   @override
   Widget build(BuildContext context) {
     final dil = AppLocalizations.of(context)!;
     final anaRenk = ProjeTemasi.anaRenk;
     final user = _auth.currentUser;
 
+    // YERELDEN VERİYİ DİNLİYORUZ (HİBRİT)
+    final sinifListesi = ref.watch(siniflarProvider);
+
     return ProjeSayfaSablonu(
       baslikWidget: _profilBaslikWidget(context, dil, user),
       aksiyonlar: [_ekleButonu(context, dil)],
-      // STREAMBUILDER İLE CANLI VERİ AKIŞI
-      icerik: user == null
-          ? const Center(child: Text("Giriş yapılmalı"))
-          : StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('users')
-                  .doc(user.uid)
-                  .collection('siniflar')
-                  .orderBy('ad') // Sınıf adına göre sıralı gelsin
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return _bosDurumWidget(dil);
-                }
-
-                // 1. Verileri Modele Çevir
-                final tumSiniflar = snapshot.data!.docs.map((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  // SinifModel yapını kullanıyoruz ama ID'yi string (doc.id) olarak alıyoruz
-                  // Eğer modelindeki id int ise, onu String docId diye yeni bir alana eklemen gerekebilir.
-                  // Şimdilik modelin yapısını bozmadan manuel mapping yapıyorum:
-                  return SinifModel(
-                    id: doc.id.hashCode, // Renk seçimi için geçici int ID
-                    sinifAdi:
-                        data['ad'] ?? '', // Firebase'den 'ad' alanını çekiyoruz
-                    aciklama: data['aciklama'] ?? '',
-                    // docId'yi saklamak için modelde alan yoksa bu map içinde tutabiliriz
-                    // Ama silme işlemi için doc.id'ye ihtiyacımız var.
-                  );
-                }).toList();
-
-                final docIds = snapshot.data!.docs.map((d) => d.id).toList();
-
-                // 2. Gruplama Mantığı (Senin Orijinal Kodun)
-                Map<String, List<int>> gruplanmisIndexler =
-                    {}; // Indexleri tutacağız
-
-                for (int i = 0; i < tumSiniflar.length; i++) {
-                  var sinif = tumSiniflar[i];
-                  String grupAdi = sinif.sinifAdi.split('-')[0];
-                  if (!gruplanmisIndexler.containsKey(grupAdi)) {
-                    gruplanmisIndexler[grupAdi] = [];
-                  }
-                  gruplanmisIndexler[grupAdi]!.add(i);
-                }
-
-                var siraliGruplar = gruplanmisIndexler.keys.toList();
-                siraliGruplar.sort((a, b) {
-                  int? s1 = int.tryParse(a);
-                  int? s2 = int.tryParse(b);
-                  if (s1 != null && s2 != null) return s1.compareTo(s2);
-                  return a.compareTo(b);
-                });
-
-                // 3. Listeyi Oluştur
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
-                  itemCount: siraliGruplar.length,
-                  itemBuilder: (context, index) {
-                    String grupAdi = siraliGruplar[index];
-                    List<int> sinifIndexleri = gruplanmisIndexler[grupAdi]!;
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _grupBasligi(grupAdi, sinifIndexleri.length, anaRenk),
-                        ...sinifIndexleri.map((i) {
-                          var sinif = tumSiniflar[i];
-                          var docId =
-                              docIds[i]; // Silme/Güncelleme için gerçek ID
-                          return _modernSinifKarti(
-                            sinif,
-                            docId,
-                            context,
-                            dil,
-                            i,
-                          );
-                        }),
-                        const SizedBox(height: 5),
-                      ],
-                    );
-                  },
-                );
-              },
+      icerik: sinifListesi.isEmpty
+          ? _bosDurumWidget(dil)
+          : ListView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
+              children: _gruplanmisListeyiOlustur(sinifListesi, anaRenk, dil),
             ),
     );
+  }
+
+  // --- LİSTE OLUŞTURUCU (GÜNCELLENDİ: SIRALAMA EKLENDİ) ---
+  List<Widget> _gruplanmisListeyiOlustur(
+    List<SinifModel> tumSiniflar,
+    Color anaRenk,
+    AppLocalizations dil,
+  ) {
+    Map<String, List<SinifModel>> gruplar = {};
+
+    for (var sinif in tumSiniflar) {
+      String grupAdi = sinif.sinifAdi.split('-')[0];
+      if (!gruplar.containsKey(grupAdi)) {
+        gruplar[grupAdi] = [];
+      }
+      gruplar[grupAdi]!.add(sinif);
+    }
+
+    // 1. Grupları (5, 6, 7...) Sırala
+    var siraliGruplar = gruplar.keys.toList();
+    siraliGruplar.sort((a, b) {
+      int? s1 = int.tryParse(a);
+      int? s2 = int.tryParse(b);
+      if (s1 != null && s2 != null) return s1.compareTo(s2);
+      return a.compareTo(b);
+    });
+
+    List<Widget> widgetListesi = [];
+    int globalIndex = 0;
+
+    for (var grupAdi in siraliGruplar) {
+      var siniflar = gruplar[grupAdi]!;
+
+      // 2. Şubeleri (A, B, C...) Kendi İçinde Sırala
+      siniflar.sort((a, b) => a.sinifAdi.compareTo(b.sinifAdi));
+
+      widgetListesi.add(_grupBasligi(grupAdi, siniflar.length, anaRenk));
+
+      for (var sinif in siniflar) {
+        widgetListesi.add(_modernSinifKarti(sinif, context, dil, globalIndex));
+        widgetListesi.add(const SizedBox(height: 10)); // Kartlar arası boşluk
+        globalIndex++;
+      }
+    }
+    return widgetListesi;
   }
 
   // --- YARDIMCI WIDGETLAR ---
 
-  Widget _ekleButonu(BuildContext context, AppLocalizations dil) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 12.0),
-      child: Material(
-        color: Colors.white.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _sinifIslemPaneli(context, dil, null, null),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black.withOpacity(0.1)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.add_rounded,
-                  color: Color(0xFF1E293B),
-                  size: 18,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  dil.sinifEkle.toUpperCase(),
-                  style: const TextStyle(
-                    color: Color(0xFF1E293B),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 10,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _profilBaslikWidget(
+  Widget _modernSinifKarti(
+    SinifModel sinif,
     BuildContext context,
     AppLocalizations dil,
-    User? user,
+    int index,
   ) {
-    return Row(
-      children: [
-        GestureDetector(
-          // --- DEĞİŞİKLİK BURADA BAŞLIYOR ---
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ProfilAyarlariSayfasi(),
+    final renk = _kartRenkleri[index % _kartRenkleri.length];
+
+    return Container(
+      height: 70,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.01),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OgrencilerSayfasi(sinif: sinif),
+          ),
+        ),
+        borderRadius: BorderRadius.circular(15),
+        child: Row(
+          children: [
+            Container(
+              width: 6,
+              decoration: BoxDecoration(
+                color: renk,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(15),
+                  bottomLeft: Radius.circular(15),
+                ),
               ),
-            ).then((_) {
-              // Profil sayfasından geri dönüldüğünde burası çalışır
-              setState(() {}); // Sayfayı yeniler ve yeni rengi alır
-            });
-          },
-          // --- DEĞİŞİKLİK BURADA BİTİYOR ---
-          child: CircleAvatar(
-            radius: 22,
-            backgroundColor: Colors.white,
-            backgroundImage: (user?.photoURL != null)
-                ? NetworkImage(user!.photoURL!)
-                : null,
-            child: (user?.photoURL == null)
-                ? const Icon(Icons.person, color: Colors.grey)
-                : null,
-          ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Text(
+                sinif.sinifAdi,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(
+                Icons.edit_note_rounded,
+                color: Colors.blueGrey,
+                size: 24,
+              ),
+              onPressed: () => _sinifIslemPaneli(context, dil, sinif),
+            ),
+            IconButton(
+              icon: const Icon(
+                Icons.delete_sweep_outlined,
+                color: Colors.redAccent,
+                size: 22,
+              ),
+              onPressed: () => _modernSilmeOnayi(context, sinif),
+            ),
+            const SizedBox(width: 5),
+          ],
         ),
-        const SizedBox(width: 12),
-        Text(
-          dil.siniflar,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF1E293B),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -285,7 +200,6 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
     BuildContext context,
     AppLocalizations dil,
     SinifModel? sinif,
-    String? docId,
   ) {
     final bool duzenlemeModu = sinif != null;
     final adController = TextEditingController(text: sinif?.sinifAdi ?? "");
@@ -374,12 +288,23 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
                 onPressed: () {
                   if (adController.text.isNotEmpty) {
                     String formatliAd = _formatla(adController.text);
-                    // Firebase'e Kaydetme İşlemi
-                    _sinifKaydet(
-                      formatliAd,
-                      aciklamaController.text.trim(),
-                      docId: docId,
-                    );
+                    if (duzenlemeModu) {
+                      ref
+                          .read(siniflarProvider.notifier)
+                          .sinifGuncelle(
+                            sinif.id!,
+                            sinif.sinifAdi,
+                            formatliAd,
+                            aciklamaController.text.trim(),
+                          );
+                    } else {
+                      ref
+                          .read(siniflarProvider.notifier)
+                          .sinifEkle(
+                            formatliAd,
+                            aciklamaController.text.trim(),
+                          );
+                    }
                     Navigator.pop(context);
                   }
                 },
@@ -398,85 +323,7 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
     );
   }
 
-  Widget _modernSinifKarti(
-    SinifModel sinif,
-    String docId,
-    BuildContext context,
-    AppLocalizations dil,
-    int index,
-  ) {
-    // Rengi index'e göre seçiyoruz
-    final renk = _kartRenkleri[index % _kartRenkleri.length];
-
-    return Container(
-      height: 70,
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.shade100),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.01),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OgrencilerSayfasi(sinif: sinif),
-          ),
-        ),
-        borderRadius: BorderRadius.circular(15),
-        child: Row(
-          children: [
-            Container(
-              width: 6,
-              decoration: BoxDecoration(
-                color: renk,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(15),
-                  bottomLeft: Radius.circular(15),
-                ),
-              ),
-            ),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Text(
-                sinif.sinifAdi,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(
-                Icons.edit_note_rounded,
-                color: Colors.blueGrey,
-                size: 24,
-              ),
-              onPressed: () => _sinifIslemPaneli(context, dil, sinif, docId),
-            ),
-            IconButton(
-              icon: const Icon(
-                Icons.delete_sweep_outlined,
-                color: Colors.redAccent,
-                size: 22,
-              ),
-              onPressed: () => _modernSilmeOnayi(context, sinif, docId),
-            ),
-            const SizedBox(width: 5),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _modernSilmeOnayi(BuildContext context, SinifModel sinif, String docId) {
+  void _modernSilmeOnayi(BuildContext context, SinifModel sinif) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -493,13 +340,95 @@ class _SiniflarSayfasiState extends ConsumerState<SiniflarSayfasi> {
           ),
           TextButton(
             onPressed: () {
-              _sinifSil(docId); // Firebase'den sil
+              ref
+                  .read(siniflarProvider.notifier)
+                  .sinifSil(sinif.id!, sinif.sinifAdi);
               Navigator.pop(context);
             },
             child: const Text("SİL", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _ekleButonu(BuildContext context, AppLocalizations dil) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 12.0),
+      child: Material(
+        color: Colors.white.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _sinifIslemPaneli(context, dil, null),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.black.withOpacity(0.1)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.add_rounded,
+                  color: Color(0xFF1E293B),
+                  size: 18,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  dil.sinifEkle.toUpperCase(),
+                  style: const TextStyle(
+                    color: Color(0xFF1E293B),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 10,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _profilBaslikWidget(
+    BuildContext context,
+    AppLocalizations dil,
+    User? user,
+  ) {
+    return Row(
+      children: [
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ProfilAyarlariSayfasi(),
+              ),
+            ).then((_) => setState(() {}));
+          },
+          child: CircleAvatar(
+            radius: 22,
+            backgroundColor: Colors.white,
+            backgroundImage: (user?.photoURL != null)
+                ? NetworkImage(user!.photoURL!)
+                : null,
+            child: (user?.photoURL == null)
+                ? const Icon(Icons.person, color: Colors.grey)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          dil.siniflar,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+      ],
     );
   }
 

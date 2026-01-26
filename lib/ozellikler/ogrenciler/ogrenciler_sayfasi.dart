@@ -5,7 +5,6 @@ import 'package:ogretmenim/ozellikler/ogrenciler/ogrenci_ekle_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/ogrenciler/ogrenciler_provider.dart';
 import 'package:ogretmenim/veri/modeller/sinif_model.dart';
 import 'package:ogretmenim/cekirdek/araclar/pdf_servisi.dart';
-// YENİ EKLENDİ: Excel Servisi
 import 'pdf_onizleme_sayfasi.dart';
 import 'package:ogretmenim/cekirdek/araclar/bildirim_araci.dart';
 import 'excel_preview_edit_page.dart';
@@ -28,7 +27,11 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
   void initState() {
     super.initState();
     Future.microtask(() {
-      ref.read(ogrencilerProvider.notifier).ogrencileriYukle(widget.sinif.id!);
+      if (widget.sinif.id != null) {
+        ref
+            .read(ogrencilerProvider.notifier)
+            .ogrencileriYukle(widget.sinif.id!);
+      }
     });
 
     _aramaController.addListener(() {
@@ -49,9 +52,23 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
     final tumOgrenciler = ref.watch(ogrencilerProvider);
     final anaRenk = Theme.of(context).primaryColor;
 
+    // --- KRİTİK DÜZELTME: FİLTRELEME ---
+    // Gelen tüm listeyi değil, sadece bu sınıfa ait olanları alıyoruz.
+    final sinifOgrencileri = tumOgrenciler
+        .where((o) => o.sinifId == widget.sinif.id)
+        .toList();
+
+    // Numaraya göre sırala (Küçükten büyüğe)
+    sinifOgrencileri.sort((a, b) {
+      int noA = int.tryParse(a.numara) ?? 0;
+      int noB = int.tryParse(b.numara) ?? 0;
+      return noA.compareTo(noB);
+    });
+
+    // Arama filtresini "sinifOgrencileri" üzerinden yapıyoruz
     final goruntulenenListe = _aramaMetni.isEmpty
-        ? tumOgrenciler
-        : tumOgrenciler.where((ogrenci) {
+        ? sinifOgrencileri
+        : sinifOgrencileri.where((ogrenci) {
             final adSoyad = "${ogrenci.ad} ${ogrenci.soyad ?? ''}"
                 .toLowerCase();
             final numara = ogrenci.numara.toLowerCase();
@@ -59,10 +76,11 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                 numara.contains(_aramaMetni);
           }).toList();
 
-    final int kizSayisi = tumOgrenciler
-        .where((o) => o.cinsiyet == 'Kız')
+    // İstatistikler de filtrelenmiş listeden hesaplanmalı
+    final int kizSayisi = sinifOgrencileri
+        .where((o) => o.cinsiyet == 'Kız' || o.cinsiyet == 'Kiz')
         .length;
-    final int erkekSayisi = tumOgrenciler
+    final int erkekSayisi = sinifOgrencileri
         .where((o) => o.cinsiyet == 'Erkek')
         .length;
 
@@ -141,7 +159,7 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Toplam ${tumOgrenciler.length} Öğrenci",
+                          "Toplam ${sinifOgrencileri.length} Öğrenci",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -214,7 +232,9 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                     itemCount: goruntulenenListe.length,
                     itemBuilder: (context, index) {
                       final ogrenci = goruntulenenListe[index];
-                      final bool isKiz = ogrenci.cinsiyet == 'Kız';
+                      final bool isKiz =
+                          ogrenci.cinsiyet == 'Kız' ||
+                          ogrenci.cinsiyet == 'Kiz';
                       final renk = isKiz ? Colors.pink : Colors.blue;
 
                       return Container(
@@ -378,7 +398,6 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
     );
   }
 
-  // --- GÜNCELLENEN KISIM BURASI ---
   void _eklemeSecenekleriniGoster(BuildContext anaContext) {
     showModalBottomSheet(
       context: anaContext,
@@ -431,18 +450,15 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
 
                 const SizedBox(height: 10),
 
-                // 2. EXCEL'DEN ÇEK (YENİ EKLENEN BUTON)
+                // 2. EXCEL'DEN ÇEK
                 ListTile(
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50, // Excel Yeşili
+                      color: Colors.green.shade50,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.table_view, // Excel İkonu
-                      color: Colors.green,
-                    ),
+                    child: const Icon(Icons.table_view, color: Colors.green),
                   ),
                   title: const Text(
                     "Excel'den Çek (Önerilen)",
@@ -450,8 +466,7 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                   ),
                   subtitle: const Text(".xlsx dosyası yükle"),
                   onTap: () async {
-                    Navigator.pop(sheetContext); // Menüyü kapat
-                    // Seçili sınıf adını ve id'sini Excel ekranına gönder
+                    Navigator.pop(sheetContext);
                     Navigator.push(
                       anaContext,
                       MaterialPageRoute(
@@ -484,7 +499,6 @@ class _OgrencilerSayfasiState extends ConsumerState<OgrencilerSayfasi> {
                   onTap: () async {
                     Navigator.pop(sheetContext);
 
-                    // --- PDF MANTIĞI ---
                     final pdfDosyasi = await PdfServisi().pdfDosyasiSec();
                     if (pdfDosyasi != null) {
                       final bulunanlar = await PdfServisi().ogrencileriAyikla(

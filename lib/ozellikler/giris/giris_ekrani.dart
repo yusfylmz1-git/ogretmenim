@@ -45,7 +45,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
     );
   }
 
-  // --- KVKK ÖNİZLEME PENCERESİ (Altı çizgisiz metin için tetikleyici) ---
+  // --- KVKK ÖNİZLEME PENCERESİ ---
   void _kvkkOnizlemeGoster(BuildContext context) {
     showDialog(
       context: context,
@@ -81,7 +81,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
     );
   }
 
-  // --- ÇIKIŞ ONAY PANELİ (YAPI KREDİ STİLİ) ---
+  // --- ÇIKIŞ ONAY PANELİ ---
   void _cikisOnaySorgusu(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -152,7 +152,9 @@ class _GirisEkraniState extends State<GirisEkrani> {
     );
   }
 
+  // --- GİRİŞ MANTIĞI (GÜNCELLENDİ) ---
   Future<void> _googleIleGiris() async {
+    // 1. KVKK Kontrolü
     if (!_kvkkOnay) {
       _usttenUyariGoster(
         context,
@@ -160,29 +162,46 @@ class _GirisEkraniState extends State<GirisEkrani> {
       );
       return;
     }
+
+    // 2. Yükleniyor durumunu başlat
     setState(() {
       _loading = true;
       _hataMesaji = null;
     });
+
     try {
+      // 3. Google Sign-In Başlat
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+
+      // Kullanıcı iptal ettiyse yükleniyor'u kapat
       if (googleUser == null) {
-        setState(() {
-          _loading = false;
-        });
+        if (mounted) setState(() => _loading = false);
         return;
       }
+
+      // 4. Google'dan Kimlik Bilgilerini Al
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
+
+      // 5. Firebase'e Giriş Yap
+      // BURASI ÖNEMLİ: Giriş başarılı olduğu an main.dart'taki StreamBuilder tetiklenir
+      // ve bu sayfa (GirisEkrani) dispose edilir (yok edilir).
       await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // BAŞARILI OLURSA BURADAN SONRA HİÇBİR ŞEY YAPMIYORUZ.
+      // setState() ÇAĞIRMIYORUZ. Çünkü sayfa artık yok.
     } catch (e) {
-      setState(() => _hataMesaji = 'Giriş başarısız: $e');
-    } finally {
-      setState(() => _loading = false);
+      // Sadece hata olursa ekran hala açıktır, o zaman kullanıcıya bilgi ver.
+      if (mounted) {
+        setState(() {
+          _hataMesaji = 'Giriş başarısız: $e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -358,7 +377,7 @@ class _GirisEkraniState extends State<GirisEkrani> {
                       ),
                       const SizedBox(height: 20),
 
-                      // KVKK Checkbox ve Sade Metin (Çizgi kaldırıldı)
+                      // KVKK Checkbox ve Sade Metin
                       Row(
                         children: [
                           Checkbox(
@@ -376,7 +395,6 @@ class _GirisEkraniState extends State<GirisEkrani> {
                                 style: TextStyle(
                                   color: Colors.white70,
                                   fontSize: 10,
-                                  // decoration: TextDecoration.underline satırı kaldırıldı
                                 ),
                               ),
                             ),

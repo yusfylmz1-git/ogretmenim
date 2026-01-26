@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:ogretmenim/gen_l10n/app_localizations.dart';
-// 👇 1. DEĞİŞİKLİK BURADA: Yeni sayfayı import ettik
 import 'package:ogretmenim/ozellikler/siniflar/siniflar_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/ozet/ozet_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/ders_programi/ders_programi_sayfasi.dart';
+// Profil ayarlarını (Menü) import ediyoruz
+import 'package:ogretmenim/ozellikler/profil/profil_ayarlari.dart';
 
 class AnaSayfa extends StatefulWidget {
   const AnaSayfa({super.key});
@@ -24,7 +25,7 @@ class _AnaSayfaState extends State<AnaSayfa> {
       const OzetSayfasi(), // 0: Özet
       const SiniflarSayfasi(), // 1: Sınıflar
       const DersProgramiSayfasi(), // 2: Ders Programı
-      Center(child: Text(dil.menu)), // 3: Menü
+      const ProfilAyarlariSayfasi(), // 3: Menü (Profil/Ayarlar) -> DÜZELTİLDİ
     ];
 
     return Scaffold(
@@ -52,11 +53,13 @@ class _AnaSayfaState extends State<AnaSayfa> {
             selectedIcon: const Icon(Icons.calendar_month),
             label: dil.program,
           ),
-          NavigationDestination(icon: const Icon(Icons.menu), label: dil.menu),
+          NavigationDestination(
+            icon: const Icon(Icons.person_outline), // İkonu kişi yaptık
+            selectedIcon: const Icon(Icons.person),
+            label: dil.menu,
+          ),
         ],
       ),
     );
   }
 }
-
-// MerkezSayfa kaldırıldı. Artık OzetSayfasi kullanılacak.

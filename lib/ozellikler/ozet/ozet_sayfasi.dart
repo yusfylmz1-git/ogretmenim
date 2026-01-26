@@ -1,21 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Riverpod
 import 'package:intl/intl.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ogretmenim/gen_l10n/app_localizations.dart';
-import '../profil/profil_ayarlari.dart';
 import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart';
 import 'package:ogretmenim/cekirdek/yoneticiler/program_ayarlari.dart';
 import 'package:ogretmenim/veri/modeller/ders_model.dart';
+import 'package:ogretmenim/ozellikler/profil/profil_ayarlari.dart';
+import 'package:ogretmenim/ozellikler/ders_programi/dersler_provider.dart';
+// Sayfa geçişleri ve veri için eklenen importlar:
+import 'package:ogretmenim/ozellikler/ders_ici_katilim/ders_ici_katilim_sayfasi.dart';
+import 'package:ogretmenim/ozellikler/siniflar/siniflar_provider.dart';
+// import 'package:ogretmenim/ozellikler/ogrenciler/ogrenciler_provider.dart'; // Buradan sildik çünkü burada kullanmayacağız
 
-class OzetSayfasi extends StatefulWidget {
+class OzetSayfasi extends ConsumerStatefulWidget {
   const OzetSayfasi({super.key});
 
   @override
-  State<OzetSayfasi> createState() => _OzetSayfasiState();
+  ConsumerState<OzetSayfasi> createState() => _OzetSayfasiState();
 }
 
-class _OzetSayfasiState extends State<OzetSayfasi> {
+class _OzetSayfasiState extends ConsumerState<OzetSayfasi> {
+  // --- ÖN YÜKLEME (Lazy Loading Çözümü) ---
+  @override
+  void initState() {
+    super.initState();
+    // Sayfa açılır açılmaz SADECE sınıfları yüklüyoruz.
+    // Öğrencileri yükleyemeyiz çünkü hangi sınıfın öğrencisi henüz belli değil.
+    Future.microtask(() {
+      ref.read(siniflarProvider.notifier).siniflariYukle();
+    });
+  }
+  // ----------------------------------------
+
   void _profilSayfasinaGit() {
     Navigator.push(
       context,
@@ -28,11 +45,17 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
   // --- SAAT HESAPLAMA ---
   String _dersSaatAriligiBul(int dersIndex) {
     int baslangicDk =
-        ProgramAyarlari.baslangicSaati.hour * 60 +
-        ProgramAyarlari.baslangicSaati.minute;
+        ProgramAyarlari.ilkDersSaati.hour * 60 +
+        ProgramAyarlari.ilkDersSaati.minute;
+
     int gecenSure =
         dersIndex *
         (ProgramAyarlari.dersSuresi + ProgramAyarlari.teneffusSuresi);
+
+    if (ProgramAyarlari.ogleArasiVarMi && dersIndex >= 4) {
+      gecenSure +=
+          (ProgramAyarlari.ogleArasiSuresi - ProgramAyarlari.teneffusSuresi);
+    }
 
     int dersBaslama = baslangicDk + gecenSure;
     int dersBitis = dersBaslama + ProgramAyarlari.dersSuresi;
@@ -49,7 +72,34 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
   @override
   Widget build(BuildContext context) {
     final dil = AppLocalizations.of(context)!;
-    final user = FirebaseAuth.instance.currentUser;
+
+    // Dersleri Provider'dan dinle
+    final tumDersler = ref.watch(derslerProvider);
+
+    // --- AKILLI GÜN SEÇİMİ ---
+    DateTime dateKontrol = DateTime.now();
+    String gosterilenGunIsmi = "";
+    List<DersModel> gosterilecekDersler = [];
+
+    for (int i = 0; i < 7; i++) {
+      String gunIsmi = DateFormat(
+        'EEEE',
+        'tr_TR',
+      ).format(dateKontrol.add(Duration(days: i)));
+      var oGununDersleri = tumDersler
+          .where((d) => d.gun.toLowerCase() == gunIsmi.toLowerCase())
+          .toList();
+
+      if (oGununDersleri.isNotEmpty) {
+        gosterilecekDersler = oGununDersleri;
+        gosterilenGunIsmi = (i == 0) ? "Bugün" : ((i == 1) ? "Yarın" : gunIsmi);
+        break;
+      }
+    }
+
+    gosterilecekDersler.sort(
+      (a, b) => a.dersSaatiIndex.compareTo(b.dersSaatiIndex),
+    );
 
     return ProjeSayfaSablonu(
       baslikWidget: _profilBaslikWidget(context, dil),
@@ -79,116 +129,58 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
           _islemGridi(context),
           const SizedBox(height: 35),
 
-          // --- DİNAMİK TIMELINE BÖLÜMÜ ---
-          if (user != null)
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .collection('dersler')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData)
-                  return const Center(child: CircularProgressIndicator());
-
-                var tumDersler = snapshot.data!.docs
-                    .map(
-                      (doc) => DersModel.fromMap(
-                        doc.data() as Map<String, dynamic>,
-                        doc.id,
+          // --- TIMELINE ---
+          if (gosterilecekDersler.isEmpty)
+            _bosGunMesaji()
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 15.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Akış & Duyurular",
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1E293B),
+                        ),
                       ),
-                    )
-                    .toList();
-
-                // --- AKILLI GÜN SEÇİMİ ---
-                // Önce bugüne bak, yoksa yarına, yoksa sonraki güne...
-                // Böylece "Boş Kart" yerine en yakın dersi görürsün.
-                DateTime dateKontrol = DateTime.now();
-                String gosterilenGunIsmi = "";
-                List<DersModel> gosterilecekDersler = [];
-
-                // 7 gün sonrasına kadar kontrol et
-                for (int i = 0; i < 7; i++) {
-                  String gunIsmi = DateFormat(
-                    'EEEE',
-                    'tr_TR',
-                  ).format(dateKontrol.add(Duration(days: i)));
-                  var oGununDersleri = tumDersler
-                      .where((d) => d.gun == gunIsmi)
-                      .toList();
-
-                  if (oGununDersleri.isNotEmpty) {
-                    gosterilecekDersler = oGununDersleri;
-                    gosterilenGunIsmi = (i == 0)
-                        ? "Bugün"
-                        : ((i == 1) ? "Yarın" : gunIsmi);
-                    break;
-                  }
-                }
-
-                // Eğer hiç ders yoksa (tüm hafta boşsa)
-                if (gosterilecekDersler.isEmpty) {
-                  return _bosGunMesaji();
-                }
-
-                // Saat sırasına diz
-                gosterilecekDersler.sort(
-                  (a, b) => a.dersSaatiIndex.compareTo(b.dersSaatiIndex),
-                );
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // BAŞLIK
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 15.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            "Akış & Duyurular",
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                          Text(
-                            gosterilenGunIsmi,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: ProjeTemasi.anaRenk,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        gosterilenGunIsmi,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: ProjeTemasi.anaRenk,
+                        ),
                       ),
-                    ),
-
-                    // --- TIMELINE LİSTESİ ---
-                    ...List.generate(gosterilecekDersler.length, (index) {
-                      final ders = gosterilecekDersler[index];
-                      return _timelineItem(
-                        baslik: ders.dersAdi,
-                        icerik: "${ders.sinif} Sınıfı",
-                        zaman: _dersSaatAriligiBul(ders.dersSaatiIndex),
-                        renk: Color(ders.renkValue),
-                        ikon: Icons.class_,
-                        isLast: index == gosterilecekDersler.length - 1,
-                      );
-                    }),
-                  ],
-                );
-              },
+                    ],
+                  ),
+                ),
+                ...List.generate(gosterilecekDersler.length, (index) {
+                  final ders = gosterilecekDersler[index];
+                  return _timelineItem(
+                    baslik: ders.dersAdi,
+                    icerik: "${ders.sinif} Sınıfı",
+                    zaman: _dersSaatAriligiBul(ders.dersSaatiIndex),
+                    renk: ders.renk,
+                    ikon: Icons.class_,
+                    isLast: index == gosterilecekDersler.length - 1,
+                  );
+                }),
+              ],
             ),
-
           const SizedBox(height: 50),
         ],
       ),
     );
   }
 
-  // --- SADE TIMELINE TASARIMI (ESKİ HALİ) ---
+  // --- WIDGETLAR ---
+
   Widget _timelineItem({
     required String baslik,
     required String icerik,
@@ -199,9 +191,8 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
   }) {
     return IntrinsicHeight(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. SOL SÜTUN (İkon ve Çizgi)
           Column(
             children: [
               Container(
@@ -224,8 +215,6 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
             ],
           ),
           const SizedBox(width: 15),
-
-          // 2. SAĞ SÜTUN (İçerik)
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 25.0, top: 4),
@@ -235,7 +224,6 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Ders Adı
                       Text(
                         baslik,
                         style: const TextStyle(
@@ -244,19 +232,17 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
                           color: Color(0xFF1E293B),
                         ),
                       ),
-                      // Saat (SADE METİN - KART YOK)
                       Text(
                         zaman,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade400, // Silik gri renk
+                          color: Colors.grey.shade400,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
-                  // Sınıf Bilgisi
                   Text(
                     icerik,
                     style: TextStyle(
@@ -297,7 +283,6 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
     );
   }
 
-  // --- DİĞER WIDGETLAR ---
   Widget _profilBaslikWidget(BuildContext context, AppLocalizations dil) {
     final user = FirebaseAuth.instance.currentUser;
     return Row(
@@ -357,36 +342,45 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
           "Ders İçi Katılım",
           Icons.how_to_reg_rounded,
           const Color(0xFF3B82F6),
+          () {
+            // Panel açma fonksiyonunu çağırıyoruz
+            _sinifSecimPaneliniAc(context);
+          },
         ),
         _islemButonu(
           context,
           "Kazanımlar",
           Icons.auto_awesome_rounded,
           const Color(0xFF10B981),
+          () {},
         ),
         _islemButonu(
           context,
           "Evraklarım",
           Icons.folder_copy_rounded,
           const Color(0xFFFB7185),
+          () {},
         ),
         _islemButonu(
           context,
           "Sınav Analizi",
           Icons.bar_chart_rounded,
           const Color(0xFF8B5CF6),
+          () {},
         ),
         _islemButonu(
           context,
           "Sınav Takibi",
           Icons.event_note_rounded,
           const Color(0xFFF59E0B),
+          () {},
         ),
         _islemButonu(
           context,
           "Analiz & Rapor",
           Icons.analytics_rounded,
           const Color(0xFF0EA5E9),
+          () {},
         ),
       ],
     );
@@ -397,6 +391,7 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
     String baslik,
     IconData ikon,
     Color renk,
+    VoidCallback onTap,
   ) {
     return Container(
       decoration: BoxDecoration(
@@ -418,7 +413,7 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(24),
-          onTap: () {},
+          onTap: onTap,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -441,6 +436,104 @@ class _OzetSayfasiState extends State<OzetSayfasi> {
           ),
         ),
       ),
+    );
+  }
+
+  // --- SINIF SEÇİM PANELİ (Gerçek Veri) ---
+  void _sinifSecimPaneliniAc(BuildContext context) {
+    // 1. Provider'dan gerçek sınıf listesini al
+    final siniflar = ref.watch(siniflarProvider);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Hangi Sınıf?",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const Divider(thickness: 1, height: 20),
+
+              // Liste Boşsa Uyarı Ver
+              if (siniflar.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.class_outlined,
+                        size: 50,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        "Henüz hiç sınıf eklenmemiş.",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                // Liste Doluysa Sınıfları Göster
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true, // Liste içeriği kadar yer kaplasın
+                    itemCount: siniflar.length,
+                    itemBuilder: (context, index) {
+                      final sinif = siniflar[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.blue.shade50,
+                          child: Text(
+                            "${index + 1}",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          sinif.sinifAdi,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        trailing: const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context); // Paneli kapat
+
+                          // Seçilen sınıfa git (ID kontrolü ile)
+                          if (sinif.id != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => DersIciKatilimSayfasi(
+                                  sinifId: sinif.id!,
+                                  sinifAdi: sinif.sinifAdi,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
     );
   }
 }

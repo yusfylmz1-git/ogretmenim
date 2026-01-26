@@ -5,17 +5,20 @@ import 'package:ogretmenim/veri/modeller/ders_model.dart';
 import 'package:ogretmenim/ozellikler/siniflar/siniflar_sayfasi.dart';
 
 class DersEklemePaneli extends StatefulWidget {
-  final Function(DersModel) onDersEkle;
+  // GÜNCELLEME: İsimleri değiştirdik ve yeni parametre ekledik
+  final Function(DersModel) onDersKaydet;
   final List<DersModel> mevcutDersler;
   final int gunlukDersSayisi;
   final List<String> mevcutSiniflar;
+  final DersModel? duzenlenecekDers; // YENİ: Düzenleme için
 
   const DersEklemePaneli({
     super.key,
-    required this.onDersEkle,
+    required this.onDersKaydet,
     required this.mevcutDersler,
     required this.gunlukDersSayisi,
     required this.mevcutSiniflar,
+    this.duzenlenecekDers, // Opsiyonel
   });
 
   @override
@@ -24,32 +27,78 @@ class DersEklemePaneli extends StatefulWidget {
 
 class _DersEklemePaneliState extends State<DersEklemePaneli> {
   final TextEditingController _dersAdiController = TextEditingController();
+  final TextEditingController _sinifController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   String? _secilenSinif;
   String _secilenGun = "Pazartesi";
-  String _secilenDersSaati = "1. Ders"; // Varsayılan
+  String _secilenDersSaati = "1. Ders";
   Color _secilenRenk = Colors.blue;
 
-  // --- GARANTİ YUKARIDAN GELEN UYARI ---
+  List<String> _islenmisSinifListesi = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _listeyiHazirla();
+    _verileriDoldur(); // YENİ: Otomatik doldurma
+  }
+
+  void _listeyiHazirla() {
+    _islenmisSinifListesi = widget.mevcutSiniflar.toSet().toList();
+    _islenmisSinifListesi.sort((a, b) {
+      final regExp = RegExp(r'^(\d+)');
+      final matchA = regExp.firstMatch(a);
+      final matchB = regExp.firstMatch(b);
+      if (matchA != null && matchB != null) {
+        int numA = int.parse(matchA.group(1)!);
+        int numB = int.parse(matchB.group(1)!);
+        if (numA != numB) return numA.compareTo(numB);
+      }
+      return a.compareTo(b);
+    });
+  }
+
+  // --- FORM DOLDURMA (GÜNCELLEME MODU İÇİN) ---
+  void _verileriDoldur() {
+    if (widget.duzenlenecekDers != null) {
+      final ders = widget.duzenlenecekDers!;
+
+      _dersAdiController.text = ders.dersAdi;
+      _secilenGun = ders.gun;
+      _secilenRenk = ders.renk;
+      _secilenDersSaati = "${ders.dersSaatiIndex + 1}. Ders";
+
+      if (_islenmisSinifListesi.contains(ders.sinif)) {
+        _secilenSinif = ders.sinif;
+        _sinifController.text = ders.sinif;
+      } else {
+        _secilenSinif = null;
+        _sinifController.text = "";
+      }
+    } else {
+      if (_secilenSinif != null &&
+          !_islenmisSinifListesi.contains(_secilenSinif)) {
+        _secilenSinif = null;
+        _sinifController.text = "";
+      }
+    }
+  }
+
   void _yukaridanUyariGoster(String mesaj) {
     showGeneralDialog(
       context: context,
       barrierLabel: "Uyarı",
       barrierDismissible: true,
-      barrierColor: Colors.black12, // Arka planı hafif karart
+      barrierColor: Colors.black12,
       transitionDuration: const Duration(milliseconds: 300),
       pageBuilder: (_, __, ___) {
         return Align(
-          alignment: Alignment.topCenter, // TEPEDE GÖSTER
+          alignment: Alignment.topCenter,
           child: Material(
             color: Colors.transparent,
             child: Container(
-              margin: const EdgeInsets.only(
-                top: 60,
-                left: 20,
-                right: 20,
-              ), // StatusBar boşluğu
+              margin: const EdgeInsets.only(top: 60, left: 20, right: 20),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               decoration: BoxDecoration(
                 color: Colors.red.shade600,
@@ -77,7 +126,7 @@ class _DersEklemePaneliState extends State<DersEklemePaneli> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
-                          "Ders Çakışması!",
+                          "Dikkat!",
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -123,273 +172,355 @@ class _DersEklemePaneliState extends State<DersEklemePaneli> {
     );
   }
 
+  Future<void> _sinifSecimPaneliniAc() async {
+    FocusScope.of(context).unfocus();
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.5,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Sınıf Seçiniz",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _islenmisSinifListesi.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == _islenmisSinifListesi.length) {
+                      return ListTile(
+                        leading: Icon(
+                          Icons.add_circle_outline,
+                          color: ProjeTemasi.anaRenk,
+                        ),
+                        title: Text(
+                          "Yeni Sınıf Ekle",
+                          style: TextStyle(
+                            color: ProjeTemasi.anaRenk,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _sinifEkleSayfasinaGit();
+                        },
+                      );
+                    }
+                    final sinif = _islenmisSinifListesi[index];
+                    return ListTile(
+                      title: Text(sinif),
+                      trailing: _secilenSinif == sinif
+                          ? Icon(Icons.check_circle, color: ProjeTemasi.anaRenk)
+                          : null,
+                      onTap: () {
+                        setState(() {
+                          _secilenSinif = sinif;
+                          _sinifController.text = sinif;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final anaRenk = ProjeTemasi.anaRenk;
-
-    List<DropdownMenuItem<String>> sinifItems = widget.mevcutSiniflar
-        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-        .toList();
-
-    sinifItems.add(
-      DropdownMenuItem(
-        value: "YENI_SINIF_EKLE",
-        child: Row(
-          children: [
-            Icon(Icons.add_circle_outline, color: anaRenk, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              "Sınıf Ekle",
-              style: TextStyle(color: anaRenk, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      ),
-    );
+    final bool duzenlemeModu = widget.duzenlenecekDers != null;
 
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: Container(
-        padding: const EdgeInsets.all(25),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                "Ders Programı Girişi",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: anaRenk,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // 1. DERS ADI
-              TextFormField(
-                controller: _dersAdiController,
-                maxLength: 20,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(
-                    RegExp("[a-zA-ZğüşıöçĞÜŞİÖÇ0-9 ]"),
-                  ),
-                  TextInputFormatter.withFunction(
-                    (oldValue, newValue) =>
-                        newValue.copyWith(text: newValue.text.toUpperCase()),
-                  ),
-                ],
-                decoration: InputDecoration(
-                  labelText: "Ders Adı",
-                  counterText: "",
-                  prefixIcon: Icon(Icons.book, color: anaRenk),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-                validator: (val) => (val == null || val.trim().isEmpty)
-                    ? "Ders adı gerekli"
-                    : null,
-              ),
-              const SizedBox(height: 15),
-
-              // 2. SINIF
-              DropdownButtonFormField<String>(
-                value: _secilenSinif,
-                decoration: InputDecoration(
-                  labelText: "Sınıf",
-                  prefixIcon: Icon(Icons.class_, color: anaRenk),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-                items: sinifItems,
-                onChanged: (val) => val == "YENI_SINIF_EKLE"
-                    ? _sinifEkleSayfasinaGit()
-                    : setState(() => _secilenSinif = val),
-                validator: (val) => val == null ? "Sınıf seçiniz" : null,
-              ),
-              const SizedBox(height: 15),
-
-              // 3. GÜN VE SAAT
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _secilenGun,
-                      decoration: InputDecoration(
-                        labelText: "Gün",
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      items:
-                          [
-                                "Pazartesi",
-                                "Salı",
-                                "Çarşamba",
-                                "Perşembe",
-                                "Cuma",
-                                "Cumartesi",
-                                "Pazar",
-                              ]
-                              .map(
-                                (g) => DropdownMenuItem(
-                                  value: g,
-                                  child: Text(
-                                    g,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                      onChanged: (val) => setState(() => _secilenGun = val!),
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Container(
+          padding: const EdgeInsets.all(25),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _secilenDersSaati,
-                      decoration: InputDecoration(
-                        labelText: "Ders Saati",
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      items:
-                          List.generate(
-                                widget.gunlukDersSayisi,
-                                (index) => "${index + 1}. Ders",
-                              )
-                              .map(
-                                (s) => DropdownMenuItem(
-                                  value: s,
-                                  child: Text(
-                                    s,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                      onChanged: (val) =>
-                          setState(() => _secilenDersSaati = val!),
-                    ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  duzenlemeModu ? "Dersi Düzenle" : "Ders Programı Girişi",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: anaRenk,
                   ),
-                ],
-              ),
-              const SizedBox(height: 20),
+                ),
+                const SizedBox(height: 20),
 
-              // 4. RENK
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children:
-                    [
-                          Colors.blue,
-                          Colors.green,
-                          Colors.orange,
-                          Colors.purple,
-                          Colors.red,
-                        ]
-                        .map(
-                          (color) => GestureDetector(
-                            onTap: () => setState(() => _secilenRenk = color),
-                            child: CircleAvatar(
-                              backgroundColor: color,
-                              radius: 18,
-                              child: _secilenRenk == color
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white,
-                                      size: 20,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                        )
-                        .toList(),
-              ),
-              const SizedBox(height: 25),
-
-              // 5. KAYDET BUTONU
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: anaRenk,
-                    shape: RoundedRectangleBorder(
+                // DERS ADI
+                TextFormField(
+                  controller: _dersAdiController,
+                  maxLength: 20,
+                  textCapitalization: TextCapitalization.characters,
+                  scrollPadding: const EdgeInsets.only(bottom: 100),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp("[a-zA-ZğüşıöçĞÜŞİÖÇ0-9 ]"),
+                    ),
+                    TextInputFormatter.withFunction(
+                      (oldValue, newValue) =>
+                          newValue.copyWith(text: newValue.text.toUpperCase()),
+                    ),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: "Ders Adı",
+                    counterText: "",
+                    prefixIcon: Icon(Icons.book, color: anaRenk),
+                    border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
                     ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
                   ),
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      int secilenIndex =
-                          int.parse(_secilenDersSaati.split('.')[0]) - 1;
+                  textInputAction: TextInputAction.done,
+                  onEditingComplete: () => FocusScope.of(context).unfocus(),
+                  validator: (val) => (val == null || val.trim().isEmpty)
+                      ? "Ders adı gerekli"
+                      : null,
+                ),
+                const SizedBox(height: 15),
 
-                      // --- ÇAKIŞMA KONTROLÜ ---
-                      bool cakismaVar = widget.mevcutDersler.any(
-                        (ders) =>
-                            ders.gun == _secilenGun &&
-                            ders.dersSaatiIndex == secilenIndex,
-                      );
+                // SINIF SEÇİMİ
+                TextFormField(
+                  controller: _sinifController,
+                  readOnly: true,
+                  onTap: _sinifSecimPaneliniAc,
+                  decoration: InputDecoration(
+                    labelText: "Sınıf",
+                    prefixIcon: Icon(Icons.class_, color: anaRenk),
+                    suffixIcon: const Icon(Icons.arrow_drop_down),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  validator: (val) =>
+                      (val == null || val.isEmpty) ? "Sınıf seçiniz" : null,
+                ),
+                const SizedBox(height: 15),
 
-                      if (cakismaVar) {
-                        Navigator.pop(context); // Paneli kapat
+                // GÜN VE SAAT
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _secilenGun,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: "Gün",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        items:
+                            [
+                                  "Pazartesi",
+                                  "Salı",
+                                  "Çarşamba",
+                                  "Perşembe",
+                                  "Cuma",
+                                  "Cumartesi",
+                                  "Pazar",
+                                ]
+                                .map(
+                                  (g) => DropdownMenuItem(
+                                    value: g,
+                                    child: Text(
+                                      g,
+                                      style: const TextStyle(fontSize: 13),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                        onChanged: (val) {
+                          FocusScope.of(context).unfocus();
+                          setState(() => _secilenGun = val!);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _secilenDersSaati,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: "Ders Saati",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        items:
+                            List.generate(
+                                  widget.gunlukDersSayisi,
+                                  (index) => "${index + 1}. Ders",
+                                )
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s,
+                                      style: const TextStyle(fontSize: 13),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                        onChanged: (val) {
+                          FocusScope.of(context).unfocus();
+                          setState(() => _secilenDersSaati = val!);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
 
-                        // DÜZELTME: Artık 0 değil, direkt seçtiğin "1. Ders" yazısını yazacak.
-                        _yukaridanUyariGoster(
-                          "$_secilenGun günü $_secilenDersSaati saatinde zaten bir ders var!",
+                // RENK SEÇİMİ
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children:
+                      [
+                            Colors.blue,
+                            Colors.green,
+                            Colors.orange,
+                            Colors.purple,
+                            Colors.red,
+                          ]
+                          .map(
+                            (color) => GestureDetector(
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                setState(() => _secilenRenk = color);
+                              },
+                              child: CircleAvatar(
+                                backgroundColor: color,
+                                radius: 18,
+                                child: _secilenRenk == color
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: Colors.white,
+                                        size: 20,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                ),
+                const SizedBox(height: 25),
+
+                // KAYDET BUTONU
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: anaRenk,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    onPressed: () {
+                      FocusScope.of(context).unfocus();
+                      if (_formKey.currentState!.validate()) {
+                        int secilenIndex =
+                            int.parse(_secilenDersSaati.split('.')[0]) - 1;
+
+                        // ÇAKIŞMA KONTROLÜ (Güncelleme modunda kendisini sayma!)
+                        bool cakismaVar = widget.mevcutDersler.any((ders) {
+                          if (duzenlemeModu &&
+                              ders.id == widget.duzenlenecekDers!.id) {
+                            return false;
+                          }
+                          return ders.gun == _secilenGun &&
+                              ders.dersSaatiIndex == secilenIndex;
+                        });
+
+                        if (cakismaVar) {
+                          _yukaridanUyariGoster(
+                            "$_secilenGun günü $_secilenDersSaati saatinde zaten bir ders var!",
+                          );
+                          return;
+                        }
+
+                        final sonDers = DersModel(
+                          id: widget
+                              .duzenlenecekDers
+                              ?.id, // Varsa ID koru (Güncelleme)
+                          docId: widget
+                              .duzenlenecekDers
+                              ?.docId, // Varsa Firebase ID koru
+                          dersAdi: _dersAdiController.text,
+                          sinif: _secilenSinif!,
+                          gun: _secilenGun,
+                          dersSaatiIndex: secilenIndex,
+                          renk: _secilenRenk,
                         );
-                        return;
+
+                        widget.onDersKaydet(sonDers); // Geriye gönder
+                        Navigator.pop(context);
                       }
-
-                      final yeniDers = DersModel(
-                        id: DateTime.now().toString(),
-                        dersAdi: _dersAdiController.text,
-                        sinif: _secilenSinif!,
-                        gun: _secilenGun,
-                        dersSaatiIndex: secilenIndex,
-                        renk: _secilenRenk,
-                      );
-
-                      widget.onDersEkle(yeniDers);
-                      Navigator.pop(context);
-                    }
-                  },
-                  child: const Text(
-                    "DERSİ EKLE",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                    },
+                    child: Text(
+                      duzenlemeModu ? "DERSİ GÜNCELLE" : "DERSİ EKLE",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
