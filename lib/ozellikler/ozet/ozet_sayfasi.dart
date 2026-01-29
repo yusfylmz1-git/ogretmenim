@@ -11,7 +11,9 @@ import 'package:ogretmenim/ozellikler/ders_programi/dersler_provider.dart';
 // Sayfa geçişleri ve veri için eklenen importlar:
 import 'package:ogretmenim/ozellikler/ders_ici_katilim/ders_ici_katilim_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/siniflar/siniflar_provider.dart';
-// import 'package:ogretmenim/ozellikler/ogrenciler/ogrenciler_provider.dart'; // Buradan sildik çünkü burada kullanmayacağız
+// YENİ EKLENEN IMPORT (Sınıf Ekleme Sayfasına Gitmek İçin):
+import 'package:ogretmenim/ozellikler/siniflar/siniflar_sayfasi.dart';
+import 'package:ogretmenim/ozellikler/kazanimlar/kazanimlar_sayfasi.dart';
 
 class OzetSayfasi extends ConsumerStatefulWidget {
   const OzetSayfasi({super.key});
@@ -26,7 +28,6 @@ class _OzetSayfasiState extends ConsumerState<OzetSayfasi> {
   void initState() {
     super.initState();
     // Sayfa açılır açılmaz SADECE sınıfları yüklüyoruz.
-    // Öğrencileri yükleyemeyiz çünkü hangi sınıfın öğrencisi henüz belli değil.
     Future.microtask(() {
       ref.read(siniflarProvider.notifier).siniflariYukle();
     });
@@ -352,7 +353,15 @@ class _OzetSayfasiState extends ConsumerState<OzetSayfasi> {
           "Kazanımlar",
           Icons.auto_awesome_rounded,
           const Color(0xFF10B981),
-          () {},
+          () {
+            // YÖNLENDİRME EKLENDİ
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const KazanimlarSayfasi(),
+              ),
+            );
+          },
         ),
         _islemButonu(
           context,
@@ -439,99 +448,199 @@ class _OzetSayfasiState extends ConsumerState<OzetSayfasi> {
     );
   }
 
-  // --- SINIF SEÇİM PANELİ (Gerçek Veri) ---
+  // --- GELİŞMİŞ SINIF SEÇİM PANELİ (Sıralı + Scrollable + Boş Durum) ---
   void _sinifSecimPaneliniAc(BuildContext context) {
-    // 1. Provider'dan gerçek sınıf listesini al
-    final siniflar = ref.watch(siniflarProvider);
+    // 1. Provider'dan listeyi al ve kopyasını oluştur (Sıralama için)
+    final hamListe = ref.watch(siniflarProvider);
+    final siniflar = List.of(hamListe);
+
+    // 2. SIRALAMA: Sınıf adına göre A'dan Z'ye sırala
+    siniflar.sort((a, b) => a.sinifAdi.compareTo(b.sinifAdi));
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      isScrollControlled: true, // Panelin boyunu esnek yapar
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Hangi Sınıf?",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5, // Ekranın yarısı kadar açılsın
+          minChildSize: 0.3,
+          maxChildSize: 0.85, // En fazla %85'e kadar uzasın
+          builder: (_, controller) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              const Divider(thickness: 1, height: 20),
-
-              // Liste Boşsa Uyarı Ver
-              if (siniflar.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.class_outlined,
-                        size: 50,
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              child: Column(
+                children: [
+                  // Tutamaç (Gri Çizgi)
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
                         color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        "Henüz hiç sınıf eklenmemiş.",
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
+                    ),
                   ),
-                )
-              else
-                // Liste Doluysa Sınıfları Göster
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true, // Liste içeriği kadar yer kaplasın
-                    itemCount: siniflar.length,
-                    itemBuilder: (context, index) {
-                      final sinif = siniflar[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade50,
-                          child: Text(
-                            "${index + 1}",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
+
+                  const Text(
+                    "Hangi Sınıf?",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    "${siniflar.length} Sınıf Listelendi",
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                  const Divider(height: 20),
+
+                  // --- İÇERİK KONTROLÜ ---
+                  if (siniflar.isEmpty)
+                    // DURUM 1: HİÇ SINIF YOKSA
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.class_outlined,
+                              size: 50,
+                              color: Colors.orange.shade300,
                             ),
                           ),
-                        ),
-                        title: Text(
-                          sinif.sinifAdi,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        trailing: const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: Colors.grey,
-                        ),
-                        onTap: () {
-                          Navigator.pop(context); // Paneli kapat
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Henüz hiç sınıf eklememişsiniz.",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 30),
 
-                          // Seçilen sınıfa git (ID kontrolü ile)
-                          if (sinif.id != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => DersIciKatilimSayfasi(
-                                  sinifId: sinif.id!,
-                                  sinifAdi: sinif.sinifAdi,
+                          // SINIF EKLE BUTONU
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3B82F6),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
+                              icon: const Icon(Icons.add, color: Colors.white),
+                              label: const Text(
+                                "Yeni Sınıf Ekle",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.pop(context); // Paneli kapat
+                                // Sınıflar Sayfasına Git
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const SiniflarSayfasi(),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    // DURUM 2: SINIFLAR VARSA (LİSTELE)
+                    Expanded(
+                      child: ListView.builder(
+                        controller: controller, // Kaydırma kontrolü
+                        itemCount: siniflar.length,
+                        itemBuilder: (context, index) {
+                          final sinif = siniflar[index];
+                          return Card(
+                            elevation: 0,
+                            color: Colors.grey.shade50,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.grey.shade200),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
+                              ),
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue.withOpacity(0.1),
+                                child: Text(
+                                  sinif.sinifAdi.isNotEmpty
+                                      ? sinif.sinifAdi[0]
+                                      : "?",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                sinif.sinifAdi,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              subtitle: Text(
+                                "Ders İçi Performans Girişi",
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              trailing: const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 18,
+                                color: Colors.blue,
+                              ),
+                              onTap: () {
+                                Navigator.pop(context); // Paneli kapat
 
-              const SizedBox(height: 10),
-            ],
-          ),
+                                if (sinif.id != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          DersIciKatilimSayfasi(
+                                            sinifId: sinif.id!,
+                                            sinifAdi: sinif.sinifAdi,
+                                          ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
         );
       },
     );

@@ -9,7 +9,6 @@ import 'package:ogretmenim/veri/modeller/performans_model.dart';
 import 'package:ogretmenim/ozellikler/ogrenciler/ogrenciler_provider.dart';
 
 class DersIciKatilimSayfasi extends ConsumerStatefulWidget {
-  // Artık bu sayfa açılırken "Hangi sınıfın yoklaması?" diye soracak
   final int sinifId;
   final String sinifAdi;
 
@@ -25,111 +24,229 @@ class DersIciKatilimSayfasi extends ConsumerStatefulWidget {
 }
 
 class _DersIciKatilimSayfasiState extends ConsumerState<DersIciKatilimSayfasi> {
+  DateTime _secilenTarih = DateTime.now();
+  bool _yukleniyor = true;
+
+  // YENİ: Hızlı doldur butonunun durumunu takip eden değişken
+  bool _hizliDolduruldu = false;
+
   @override
   void initState() {
     super.initState();
-    // Sayfa açılınca hem performansları hem de BU SINIFIN öğrencilerini yükle
-    Future.microtask(() {
-      // 1. Performans verilerini çek
-      ref.read(performansProvider.notifier).verileriYukle();
+    _verileriGetir();
+  }
 
-      // 2. KRİTİK DÜZELTME: Bu sınıfa ait öğrencileri getir!
-      ref.read(ogrencilerProvider.notifier).ogrencileriYukle(widget.sinifId);
+  Future<void> _verileriGetir() async {
+    if (mounted) setState(() => _yukleniyor = true);
+
+    await Future.microtask(() async {
+      await ref
+          .read(performansProvider.notifier)
+          .verileriYukle(tarih: _secilenTarih);
+
+      await ref
+          .read(ogrencilerProvider.notifier)
+          .ogrencileriYukle(widget.sinifId);
     });
+
+    if (mounted) setState(() => _yukleniyor = false);
+  }
+
+  // --- TARİH FONKSİYONLARI ---
+  void _tarihSec(BuildContext context) async {
+    final DateTime? secilen = await showDatePicker(
+      context: context,
+      initialDate: _secilenTarih,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      locale: const Locale('tr', 'TR'),
+    );
+
+    if (secilen != null && secilen != _secilenTarih) {
+      setState(() {
+        _secilenTarih = secilen;
+        _hizliDolduruldu = false; // Tarih değişince butonu sıfırla
+      });
+      _verileriGetir();
+    }
+  }
+
+  void _gunDegistir(int gun) {
+    setState(() {
+      _secilenTarih = _secilenTarih.add(Duration(days: gun));
+      _hizliDolduruldu = false; // Gün değişince butonu sıfırla
+    });
+    _verileriGetir();
   }
 
   @override
   Widget build(BuildContext context) {
-    // 1. GERÇEK ÖĞRENCİLERİ GETİR
     final tumOgrenciler = ref.watch(ogrencilerProvider);
-
-    // Sadece seçilen sınıfa ait öğrencileri filtrele (Güvenlik önlemi)
     final sinifOgrencileri = tumOgrenciler
         .where((o) => o.sinifId == widget.sinifId)
         .toList();
 
-    // 2. PERFORMANS VERİLERİNİ GETİR
     final state = ref.watch(performansProvider);
     final performanslar = state.performanslar;
 
-    // --- PROJE ŞABLONU KULLANIMI ---
     return ProjeSayfaSablonu(
-      // Başlık
-      baslikWidget: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      // --- GELİŞMİŞ BAŞLIK (GERİ BUTONU + TARİH) ---
+      baslikWidget: Row(
         children: [
-          Text(
-            widget.sinifAdi,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
+          // 1. GERİ DÖN BUTONU
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                size: 20,
+                color: Color(0xFF1E293B),
+              ),
+              onPressed: () => Navigator.pop(context),
+              tooltip: "Geri Dön",
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
             ),
           ),
-          Text(
-            DateFormat('d MMMM EEEE', 'tr_TR').format(DateTime.now()),
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+
+          // 2. SINIF BİLGİSİ VE TARİH
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.sinifAdi,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              // Tarih Seçici Satırı
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _gunDegistir(-1),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 4),
+                      child: Icon(
+                        Icons.chevron_left,
+                        size: 20,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _tarihSec(context),
+                    child: Text(
+                      DateFormat('d MMM EEE', 'tr_TR').format(_secilenTarih),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF3B82F6),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => _gunDegistir(1),
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: Icon(
+                        Icons.chevron_right,
+                        size: 20,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
 
-      // Sağ Üst Butonlar (Hızlı Doldur)
+      // --- İNTERAKTİF HIZLI DOLDUR BUTONU ---
       aksiyonlar: [
-        Container(
-          margin: const EdgeInsets.only(right: 10),
-          decoration: BoxDecoration(
-            color: Colors.yellow.shade100,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            icon: const Icon(Icons.flash_on, color: Colors.orange),
-            tooltip: "Hızlı Doldur (Herkes 100)",
-            onPressed: () {
-              if (sinifOgrencileri.isEmpty) return;
+        GestureDetector(
+          onTap: () {
+            if (sinifOgrencileri.isEmpty) return;
 
-              // Force unwrap (!) kullanıyoruz çünkü DB'den gelen öğrencinin ID'si vardır.
-              final idListesi = sinifOgrencileri.map((e) => e.id!).toList();
-              ref.read(performansProvider.notifier).hizliDoldur(idListesi);
+            setState(() => _hizliDolduruldu = true); // Rengi değiştir
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Tüm sınıfa 100 puan verildi! 🚀"),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            final idListesi = sinifOgrencileri.map((e) => e.id!).toList();
+            ref
+                .read(performansProvider.notifier)
+                .hizliDoldur(idListesi, tarih: _secilenTarih);
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Tüm sınıfa 100 puan verildi! ⚡"),
+                duration: Duration(seconds: 1),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          },
+          child: AnimatedContainer(
+            duration: const Duration(
+              milliseconds: 300,
+            ), // Renk geçiş animasyonu
+            margin: const EdgeInsets.only(right: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              // Basıldıysa Sarı, değilse Beyaz
+              color: _hizliDolduruldu ? const Color(0xFFFFD700) : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _hizliDolduruldu ? Colors.orange : Colors.grey.shade200,
+                width: 2,
+              ),
+              boxShadow: [
+                if (!_hizliDolduruldu)
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+              ],
+            ),
+            child: Icon(
+              Icons.flash_on_rounded,
+              // Basıldıysa Beyaz, değilse Turuncu ikon
+              color: _hizliDolduruldu ? Colors.white : Colors.orange,
+              size: 24,
+            ),
           ),
         ),
       ],
 
-      // Sayfa İçeriği
-      icerik: state.yukleniyor
+      // --- İÇERİK ---
+      icerik: (state.yukleniyor || _yukleniyor)
           ? const Center(child: CircularProgressIndicator())
           : sinifOgrencileri.isEmpty
           ? _bosSinifUyaris()
           : Column(
               children: [
                 _buildOzetBilgi(sinifOgrencileri, performanslar),
-                const SizedBox(height: 10),
+                const SizedBox(height: 15),
 
-                // Liste Görünümü
                 GridView.builder(
-                  shrinkWrap: true, // İçerik kadar yer kapla
-                  physics:
-                      const NeverScrollableScrollPhysics(), // Ana sayfayla birlikte kay
-                  padding: const EdgeInsets.only(bottom: 80), // Fab için boşluk
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: 80),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
-                    childAspectRatio: 0.7,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
+                    childAspectRatio: 0.68, // Kart boyunu biraz uzattım
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
                   ),
                   itemCount: sinifOgrencileri.length,
                   itemBuilder: (context, index) {
                     final ogrenci = sinifOgrencileri[index];
-                    // Bu öğrencinin veritabanında kaydı var mı?
                     final kayit = performanslar[ogrenci.id];
-
                     return _buildOgrenciKarti(ogrenci, kayit);
                   },
                 ),
@@ -138,8 +255,178 @@ class _DersIciKatilimSayfasiState extends ConsumerState<DersIciKatilimSayfasi> {
     );
   }
 
-  // --- YARDIMCI WIDGETLAR ---
+  // --- MODERN KART TASARIMI ---
+  Widget _buildOgrenciKarti(dynamic ogrenci, PerformansModel? kayit) {
+    String tamAd = "${ogrenci.ad} ${ogrenci.soyad}";
+    int puan = kayit?.puan ?? 0;
+    bool degerlendirilmis = kayit != null;
+    bool kitapVar = kayit?.kitap == 1;
+    bool odevVar = kayit?.odev == 1;
 
+    // Renk Paleti
+    Color durumRengi = Colors.grey.shade300;
+    Color yaziRengi = Colors.grey;
+    if (degerlendirilmis) {
+      if (puan >= 85) {
+        durumRengi = const Color(0xFF10B981);
+        yaziRengi = const Color(0xFF065F46);
+      } // Yeşil
+      else if (puan >= 50) {
+        durumRengi = const Color(0xFFF59E0B);
+        yaziRengi = const Color(0xFF92400E);
+      } // Turuncu
+      else {
+        durumRengi = const Color(0xFFEF4444);
+        yaziRengi = const Color(0xFF7F1D1D);
+      } // Kırmızı
+    }
+
+    return GestureDetector(
+      onTap: () => _degerlendirmePaneliniAc(ogrenci, kayit),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.08),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            children: [
+              // Sol Taraftaki Renkli Çizgi (Durum Çubuğu)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 4, color: durumRengi),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 6, 6),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // AVATAR
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: durumRengi.withOpacity(0.1),
+                            border: Border.all(
+                              color: durumRengi.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              tamAd.isNotEmpty ? tamAd[0] : "?",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: durumRengi,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (degerlendirilmis)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.check_circle,
+                                color: durumRengi,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // İSİM
+                    Text(
+                      tamAd,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF334155),
+                        height: 1.2,
+                      ),
+                    ),
+                    const Spacer(),
+
+                    // KİTAP & ÖDEV İKONLARI (Varsa Göster)
+                    if (degerlendirilmis)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (kitapVar)
+                            const Icon(
+                              Icons.menu_book_rounded,
+                              size: 12,
+                              color: Colors.blueGrey,
+                            ),
+                          if (kitapVar && odevVar) const SizedBox(width: 4),
+                          if (odevVar)
+                            const Icon(
+                              Icons.edit_note_rounded,
+                              size: 14,
+                              color: Colors.blueGrey,
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 4),
+
+                    // PUAN KUTUSU
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: degerlendirilmis
+                            ? durumRengi.withOpacity(0.1)
+                            : Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        degerlendirilmis ? "$puan" : "-",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: degerlendirilmis ? yaziRengi : Colors.grey,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- YARDIMCI WIDGETLAR (Öncekilerle Aynı) ---
   Widget _bosSinifUyaris() {
     return Center(
       child: Column(
@@ -160,155 +447,74 @@ class _DersIciKatilimSayfasiState extends ConsumerState<DersIciKatilimSayfasi> {
     List<dynamic> ogrenciler,
     Map<int, PerformansModel> performanslar,
   ) {
-    // 1. Toplam Mevcut
     int toplam = ogrenciler.length;
-
-    // 2. Kaç kişinin kaydı var? (Canlı Hesaplama)
     int degerlendirilen = ogrenciler
         .where((o) => performanslar.containsKey(o.id))
         .length;
+    double oran = toplam == 0 ? 0 : degerlendirilen / toplam;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.blue.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.bar_chart, color: Colors.blue),
-          const SizedBox(width: 10),
-          Text(
-            "$degerlendirilen / $toplam Değerlendirildi",
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
-            ),
+          CircularProgressIndicator(
+            value: oran,
+            backgroundColor: Colors.blue.shade50,
+            color: Colors.blue,
+            strokeWidth: 6,
+          ),
+          const SizedBox(width: 15),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "$degerlendirilen / $toplam Öğrenci",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              const Text(
+                "Değerlendirildi",
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
           ),
           const Spacer(),
-          const Text(
-            "Puanlama Modu",
-            style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              "Puanlama",
+              style: TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildOgrenciKarti(dynamic ogrenci, PerformansModel? kayit) {
-    // DÜZELTME: İsimleri birleştiriyoruz
-    String tamAd = "${ogrenci.ad} ${ogrenci.soyad}";
-
-    int puan = kayit?.puan ?? 0;
-    bool degerlendirilmis = kayit != null;
-
-    Color puanRengi = Colors.grey;
-    if (puan >= 80)
-      puanRengi = Colors.green;
-    else if (puan >= 50)
-      puanRengi = Colors.orange;
-    else if (puan > 0)
-      puanRengi = Colors.red;
-
-    return GestureDetector(
-      onTap: () => _degerlendirmePaneliniAc(ogrenci, kayit),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border.all(
-            color: degerlendirilmis
-                ? puanRengi.withOpacity(0.5)
-                : Colors.grey.shade200,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.grey.shade100,
-                  radius: 24,
-                  // Baş harf
-                  child: Text(
-                    tamAd.isNotEmpty ? tamAd[0] : "?",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                if (degerlendirilmis)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.check_circle,
-                        color: puanRengi,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                tamAd,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: puanRengi.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                degerlendirilmis ? "$puan" : "-",
-                style: TextStyle(
-                  color: puanRengi,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- PANEL ---
   void _degerlendirmePaneliniAc(dynamic ogrenci, PerformansModel? mevcutKayit) {
-    // DÜZELTME: İsmi burada birleştiriyoruz
     String tamAd = "${ogrenci.ad} ${ogrenci.soyad}";
 
     showModalBottomSheet(
@@ -328,11 +534,14 @@ class _DersIciKatilimSayfasiState extends ConsumerState<DersIciKatilimSayfasi> {
             baslangicOdev: mevcutKayit?.odev == 1,
             baslangicYildiz: mevcutKayit?.yildiz ?? 1,
             onKaydet: (yeniPuan, kitap, odev, yildiz) {
-              final bugun = DateFormat('yyyy-MM-dd').format(DateTime.now());
+              final formatliTarih = DateFormat(
+                'yyyy-MM-dd',
+              ).format(_secilenTarih);
+
               final model = PerformansModel(
                 id: mevcutKayit?.id,
                 ogrenciId: ogrenci.id!,
-                tarih: bugun,
+                tarih: formatliTarih,
                 kitap: kitap ? 1 : 0,
                 odev: odev ? 1 : 0,
                 yildiz: yildiz,
@@ -349,7 +558,7 @@ class _DersIciKatilimSayfasiState extends ConsumerState<DersIciKatilimSayfasi> {
   }
 }
 
-// --- FORM WIDGET ---
+// --- FORM WIDGET (DEĞİŞİKLİK YOK) ---
 class DegerlendirmeFormu extends StatefulWidget {
   final String ogrenciAdi;
   final int numara;
@@ -403,7 +612,6 @@ class _DegerlendirmeFormuState extends State<DegerlendirmeFormu> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Tutamaç
           Center(
             child: Container(
               width: 40,
@@ -415,7 +623,6 @@ class _DegerlendirmeFormuState extends State<DegerlendirmeFormu> {
               ),
             ),
           ),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -457,18 +664,13 @@ class _DegerlendirmeFormuState extends State<DegerlendirmeFormu> {
             ],
           ),
           const Divider(height: 30),
-
-          // Switchler
           _buildSwitch(
             "Kitap/Defter (+20p)",
             _kitap,
             (v) => setState(() => _kitap = v),
           ),
           _buildSwitch("Ödev (+20p)", _odev, (v) => setState(() => _odev = v)),
-
           const SizedBox(height: 20),
-
-          // Yıldızlar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -478,7 +680,6 @@ class _DegerlendirmeFormuState extends State<DegerlendirmeFormu> {
             ],
           ),
           const SizedBox(height: 30),
-
           SizedBox(
             width: double.infinity,
             height: 56,

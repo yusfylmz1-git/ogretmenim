@@ -83,6 +83,7 @@ flutter:
     - assets/splash_logo.png
     - assets/google_logo.png
     - assets/logo.ico
+    - assets/planlar.xlsx
   # assets:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg

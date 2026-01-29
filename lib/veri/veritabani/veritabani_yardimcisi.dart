@@ -9,8 +9,8 @@ class VeritabaniYardimcisi {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    // Veritabanı yapısı değiştiği için v2 ile temiz bir başlangıç yapıyoruz.
-    _database = await _initDB('ogretmenim_v2.db');
+    // Yeni tablo eklediğimiz için versiyonu değiştirdik (v6)
+    _database = await _initDB('ogretmenim_v6.db');
     return _database!;
   }
 
@@ -22,7 +22,6 @@ class VeritabaniYardimcisi {
       path,
       version: 1,
       onCreate: _createDB,
-      // KRİTİK: İlişkisel veritabanı (Cascade Delete) desteğini her bağlantıda açıyoruz
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -36,7 +35,7 @@ class VeritabaniYardimcisi {
     const intType = 'INTEGER NOT NULL';
     const doubleType = 'REAL NOT NULL';
 
-    // 1. SINIFLAR (Unique kuralı eklendi)
+    // 1. SINIFLAR
     await db.execute('''
       CREATE TABLE siniflar (
         id $idType,
@@ -46,7 +45,7 @@ class VeritabaniYardimcisi {
       )
     ''');
 
-    // 2. ÖĞRENCİLER (ON DELETE CASCADE bağlandı)
+    // 2. ÖĞRENCİLER
     await db.execute('''
       CREATE TABLE ogrenciler (
         id $idType,
@@ -63,7 +62,7 @@ class VeritabaniYardimcisi {
       )
     ''');
 
-    // 3. DERSLER (Mevcut yapın korundu)
+    // 3. DERSLER
     await db.execute('''
       CREATE TABLE dersler (
         id $idType,
@@ -77,7 +76,7 @@ class VeritabaniYardimcisi {
       )
     ''');
 
-    // 4. DEĞERLENDİRME KRİTERLERİ (Rubrik altyapısı hazırlandı)
+    // 4. DEĞERLENDİRME KRİTERLERİ
     await db.execute('''
       CREATE TABLE degerlendirme_kriterleri (
         id $idType,
@@ -120,9 +119,80 @@ class VeritabaniYardimcisi {
         FOREIGN KEY (degerlendirme_id) REFERENCES ogrenci_degerlendirmeleri (id) ON DELETE CASCADE
       )
     ''');
+
+    // 7. PERFORMANS TABLOSU
+    await db.execute('''
+      CREATE TABLE performans (
+        id $idType,
+        ogrenci_id $intType, 
+        tarih $textType,
+        kitap $intType DEFAULT 0,
+        odev $intType DEFAULT 0,
+        yildiz $intType DEFAULT 1,
+        puan $intType DEFAULT 0,
+        FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 8. SİSTEM AYARLARI
+    await db.execute('''
+      CREATE TABLE sistem_ayarlari (
+        anahtar TEXT PRIMARY KEY,
+        deger TEXT
+      )
+    ''');
+
+    await db.execute(
+      "INSERT OR IGNORE INTO sistem_ayarlari (anahtar, deger) VALUES ('egitim_baslangic', '2025-09-08')",
+    );
+
+    // 9. KAZANIMLAR (YENİ TABLO)
+    await db.execute('''
+      CREATE TABLE kazanimlar (
+        id $idType,
+        sinif $intType,
+        brans $textType,
+        unite $textType,
+        kazanim $textType,
+        hafta $intType,
+        ders_tipi $textType
+      )
+    ''');
   }
 
-  // --- SINIF İŞLEMLERİ ---
+  // --- KAZANIM İŞLEMLERİ ---
+
+  Future<void> kazanimlariTemizle() async {
+    final db = await instance.database;
+    await db.delete('kazanimlar');
+  }
+
+  Future<void> topluKazanimEkle(
+    List<Map<String, dynamic>> kazanimListesi,
+  ) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      for (var kazanim in kazanimListesi) {
+        await txn.insert('kazanimlar', kazanim);
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> planlariGetir(
+    int sinif,
+    String brans,
+  ) async {
+    final db = await instance.database;
+    return await db.query(
+      'kazanimlar',
+      where: 'sinif = ? AND brans = ?',
+      whereArgs: [sinif, brans],
+      orderBy: 'hafta ASC',
+    );
+  }
+
+  // --- MEVCUT DİĞER FONKSİYONLAR ---
+
   Future<int> sinifEkle(Map<String, dynamic> row) async {
     final db = await instance.database;
     return await db.insert(
@@ -142,7 +212,6 @@ class VeritabaniYardimcisi {
     return await db.delete('siniflar', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- ÖĞRENCİ İŞLEMLERİ ---
   Future<int> ogrenciEkle(Map<String, dynamic> row) async {
     final db = await instance.database;
     return await db.insert('ogrenciler', row);
@@ -169,7 +238,6 @@ class VeritabaniYardimcisi {
     return await db.update('ogrenciler', row, where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- DERS İŞLEMLERİ ---
   Future<int> dersEkle(Map<String, dynamic> row) async {
     final db = await instance.database;
     return await db.insert('dersler', row);
@@ -185,16 +253,39 @@ class VeritabaniYardimcisi {
     return await db.delete('dersler', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- EKSİK OLAN METOT (Dersler Provider'ı için gerekli) ---
   Future<int> dersGuncelle(Map<String, dynamic> row) async {
     final db = await instance.database;
     int id = row['id'];
     return await db.update('dersler', row, where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- DERS İÇİ KATILIM İÇİN GEREKLİ SORGULAR ---
+  Future<int> performansEkle(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert(
+      'performans',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
 
-  // Bir öğrencinin geçmiş değerlendirmelerini çekmek için
+  Future<List<Map<String, dynamic>>> performanslariGetir() async {
+    final db = await instance.database;
+    return await db.query('performans');
+  }
+
+  Future<int> performansGuncelle(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    int id = row['id'];
+    return await db.update('performans', row, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> gunlukPerformanslariGetir(
+    String tarih,
+  ) async {
+    final db = await instance.database;
+    return await db.query('performans', where: 'tarih = ?', whereArgs: [tarih]);
+  }
+
   Future<List<Map<String, dynamic>>> ogrenciNotlariniGetir(
     int ogrenciId,
     String dersAdi,
@@ -206,5 +297,27 @@ class VeritabaniYardimcisi {
       whereArgs: [ogrenciId, dersAdi],
       orderBy: 'tarih DESC',
     );
+  }
+
+  Future<void> ayarKaydet(String anahtar, String deger) async {
+    final db = await instance.database;
+    await db.insert('sistem_ayarlari', {
+      'anahtar': anahtar,
+      'deger': deger,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<String?> ayarGetir(String anahtar) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'sistem_ayarlari',
+      columns: ['deger'],
+      where: 'anahtar = ?',
+      whereArgs: [anahtar],
+    );
+    if (maps.isNotEmpty) {
+      return maps.first['deger'] as String;
+    }
+    return null;
   }
 }

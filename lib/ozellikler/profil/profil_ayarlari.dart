@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart';
 import 'package:ogretmenim/modeller/profil_model.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:ogretmenim/ozellikler/giris/ana_sayfa.dart';
+import 'package:ogretmenim/main.dart';
 
 class ProfilAyarlariSayfasi extends StatefulWidget {
   const ProfilAyarlariSayfasi({Key? key}) : super(key: key);
@@ -72,24 +75,19 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
   }) {
     final veri = value?.trim() ?? "";
 
-    // 1. Boşluk Kontrolü
     if (zorunlu && veri.isEmpty) {
       return '$alanAdi boş bırakılamaz';
     }
 
-    // 2. Minimum Uzunluk
     if (veri.isNotEmpty && veri.length < 2) {
       return '$alanAdi en az 2 karakter olmalıdır';
     }
 
-    // 3. Maksimum Uzunluk
     if (veri.length > maxKarakter) {
       return '$alanAdi en fazla $maxKarakter karakter olabilir';
     }
 
-    // 4. Sadece Harf ve Türkçe Karakter Kontrolü (Regex)
     if (sadeceHarf && veri.isNotEmpty) {
-      // Rakam ve Özel Karakterleri (.,!-_ vb) yasaklar, sadece harf ve boşluk
       final harfRegExp = RegExp(r"^[a-zA-ZçÇğĞıİöÖşŞüÜ\s]+$");
       if (!harfRegExp.hasMatch(veri)) {
         return '$alanAdi sadece harf içermelidir';
@@ -99,14 +97,15 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
     return null;
   }
 
-  // --- HİBRİT VERİ ÇEKME (LOCAL + FIREBASE) ---
+  // --- HİBRİT VERİ ÇEKME ---
   Future<void> _verileriHibritGetir() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     _profilModel = ProfilModel(uid: user.uid);
-
     final prefs = await SharedPreferences.getInstance();
+
+    // 1. Önce Yerel Veriyi Göster
     if (mounted) {
       setState(() {
         _adController.text = prefs.getString('profil_ad') ?? '';
@@ -117,9 +116,23 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
         _secilenCinsiyet = prefs.getString('profil_cinsiyet') ?? 'Erkek';
         _fotografYolu = prefs.getString('profil_foto');
       });
+
+      // EĞER KUTULAR BOŞSA VE GOOGLE BİLGİSİ VARSA OTOMATİK DOLDUR
+      if (_adController.text.isEmpty && user.displayName != null) {
+        List<String> isimler = user.displayName!.split(" ");
+        _adController.text = isimler.first;
+        if (isimler.length > 1) {
+          _soyadController.text = isimler.sublist(1).join(" ");
+        }
+      }
+      if (_fotografYolu == null && user.photoURL != null) {
+        _fotografYolu = user.photoURL;
+      }
+
       ProjeTemasi.temayiDegistir(_secilenCinsiyet == 'Erkek');
     }
 
+    // 2. Sonra Buluttan Güncel Veriyi Çek
     try {
       await _profilModel!.verileriFirestoredanYukle();
       if (mounted) {
@@ -134,6 +147,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
             _fotografYolu = _profilModel!.fotoUrl;
         });
 
+        // Veri tutarlılığı için yerel hafızayı güncelle
         await prefs.setString('profil_ad', _adController.text);
         await prefs.setString('profil_soyad', _soyadController.text);
         await prefs.setString('profil_brans', _bransController.text);
@@ -142,15 +156,16 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
         await prefs.setString('profil_cinsiyet', _secilenCinsiyet);
         if (_fotografYolu != null)
           await prefs.setString('profil_foto', _fotografYolu!);
+
+        await prefs.reload(); // Değişiklikleri işle
       }
     } catch (e) {
       debugPrint("Firebase veri çekme hatası: $e");
     }
   }
 
-  // --- HİBRİT KAYDETME (LOCAL + FIREBASE) ---
+  // --- HİBRİT KAYDETME ---
   Future<void> _profilKaydet() async {
-    // Klavye kapat
     FocusScope.of(context).unfocus();
 
     if (_formKey.currentState!.validate()) {
@@ -158,7 +173,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
       try {
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          // 1. Önce Yerele Kaydet
+          // 1. ÖNCE YERELE KAYDET (Kapıdan geçiş bileti burası)
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('profil_ad', _adController.text.trim());
           await prefs.setString('profil_soyad', _soyadController.text.trim());
@@ -170,7 +185,10 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
             await prefs.setString('profil_foto', _fotografYolu!);
           }
 
-          // Model içindeki yerel veriyi güncelle (Senkronizasyon için)
+          // Diskin yazıldığından emin olalım (Main.dart kontrolü için kritik!)
+          await prefs.reload();
+
+          // 2. MODELİ GÜNCELLE
           _profilModel!.ad = _adController.text.trim();
           _profilModel!.soyad = _soyadController.text.trim();
           _profilModel!.brans = _bransController.text.trim();
@@ -179,7 +197,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
           _profilModel!.cinsiyet = _secilenCinsiyet;
           _profilModel!.fotoUrl = _fotografYolu;
 
-          // 2. Sonra Firebase'e Kaydet
+          // 3. BULUTA KAYDET
           await _profilModel!.verileriFirestoreaKaydet(
             ad: _adController.text.trim(),
             soyad: _soyadController.text.trim(),
@@ -197,19 +215,22 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Bilgiler cihaza ve buluta doğrulandı ve kaydedildi!',
-              ),
+              content: Text('Bilgiler başarıyla kaydedildi!'),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
           );
+
+          // 4. KESİN YÖNLENDİRME
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const AnaSayfa()),
+            (route) => false,
+          );
         }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bağlantı hatası, sadece cihaza kaydedildi.'),
-          ),
+          const SnackBar(content: Text('Hata: Bağlantınızı kontrol edin.')),
         );
       } finally {
         if (mounted) setState(() => _yukleniyor = false);
@@ -217,7 +238,31 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
     }
   }
 
-  // --- RESİM İŞLEMLERİ ---
+  // --- OTURUMU KAPAT ---
+  Future<void> _oturumuKapat() async {
+    setState(() => _yukleniyor = true);
+    try {
+      await GoogleSignIn().signOut();
+      await FirebaseAuth.instance.signOut();
+
+      // Temiz başlangıç
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      await prefs.reload(); // Silindiğinden emin ol
+
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const OturumKapisi()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint("Çıkış Hatası: $e");
+      if (mounted) setState(() => _yukleniyor = false);
+    }
+  }
+
+  // --- RESİM SEÇİM ---
   Future<void> _resimSecimPaneliniAc() async {
     showModalBottomSheet(
       context: context,
@@ -289,13 +334,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
       }
     } catch (e) {
       debugPrint("Kaydetme HATASI: $e");
-    }
-  }
-
-  Future<void> _oturumuKapat() async {
-    await FirebaseAuth.instance.signOut();
-    if (mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -372,11 +410,14 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
                 onPressed: () {
-                  // KRİTİK HATA ÇÖZÜMÜ: Eğer geri gidecek yer yoksa ana sayfaya yönlendirir
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   } else {
-                    Navigator.of(context).pushReplacementNamed('/');
+                    // Güvenli çıkış
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AnaSayfa()),
+                    );
                   }
                 },
               ),
@@ -396,8 +437,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             child: Form(
               key: _formKey,
-              autovalidateMode:
-                  AutovalidateMode.onUserInteraction, // Yazarken denetle
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 children: [
                   _bilgiKarti("Kişisel Bilgiler", [
@@ -472,7 +512,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
   }
 
   // --- YARDIMCI WIDGETLAR ---
-
   Widget _buildAvatar(User? user) {
     final googlePhoto = user?.photoURL;
     if (googlePhoto != null && googlePhoto.isNotEmpty) {
@@ -642,7 +681,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
   }) {
     return TextFormField(
       controller: controller,
-      validator: validator, // Form seviyesinde denetim için bu önemli
+      validator: validator,
       textCapitalization: TextCapitalization.words,
       decoration: InputDecoration(
         labelText: label,
