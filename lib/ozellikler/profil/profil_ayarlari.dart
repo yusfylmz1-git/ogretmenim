@@ -4,12 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// 🔥 SQLITE IMPORT EDİLDİ
+import 'package:ogretmenim/veri/veritabani/veritabani_yardimcisi.dart';
 import 'package:ogretmenim/cekirdek/tema/proje_sablonu.dart';
 import 'package:ogretmenim/modeller/profil_model.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:ogretmenim/ozellikler/giris/ana_sayfa.dart';
-import 'package:ogretmenim/main.dart';
+import 'package:ogretmenim/main.dart'; // OturumKapisi için
 
 class ProfilAyarlariSayfasi extends StatefulWidget {
   const ProfilAyarlariSayfasi({Key? key}) : super(key: key);
@@ -164,7 +166,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
     }
   }
 
-  // --- HİBRİT KAYDETME ---
+  // --- HİBRİT KAYDETME (SQLITE DAHİL EDİLDİ) ---
   Future<void> _profilKaydet() async {
     FocusScope.of(context).unfocus();
 
@@ -173,7 +175,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
       try {
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          // 1. ÖNCE YERELE KAYDET (Kapıdan geçiş bileti burası)
+          // 1. SHARED PREFERENCES KAYDI
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('profil_ad', _adController.text.trim());
           await prefs.setString('profil_soyad', _soyadController.text.trim());
@@ -184,11 +186,19 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
           if (_fotografYolu != null) {
             await prefs.setString('profil_foto', _fotografYolu!);
           }
-
-          // Diskin yazıldığından emin olalım (Main.dart kontrolü için kritik!)
           await prefs.reload();
 
-          // 2. MODELİ GÜNCELLE
+          // 🔥 2. SQLITE KAYDI (PDF RAPORLARI İÇİN EKLENDİ) 🔥
+          final db = VeritabaniYardimcisi.instance;
+          await db.ayarKaydet(
+            'ogretmen_adi',
+            "${_adController.text.trim()} ${_soyadController.text.trim()}",
+          );
+          await db.ayarKaydet('brans', _bransController.text.trim());
+          await db.ayarKaydet('okul_adi', _okulController.text.trim());
+          await db.ayarKaydet('mudur_adi', _mudurController.text.trim());
+
+          // 3. FIREBASE MODELİNİ GÜNCELLE
           _profilModel!.ad = _adController.text.trim();
           _profilModel!.soyad = _soyadController.text.trim();
           _profilModel!.brans = _bransController.text.trim();
@@ -197,7 +207,7 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
           _profilModel!.cinsiyet = _secilenCinsiyet;
           _profilModel!.fotoUrl = _fotografYolu;
 
-          // 3. BULUTA KAYDET
+          // 4. BULUTA KAYDET
           await _profilModel!.verileriFirestoreaKaydet(
             ad: _adController.text.trim(),
             soyad: _soyadController.text.trim(),
@@ -215,13 +225,15 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Bilgiler başarıyla kaydedildi!'),
+              content: Text(
+                'Bilgiler tüm sistemlere (Bulut & Yerel) kaydedildi!',
+              ),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
           );
 
-          // 4. KESİN YÖNLENDİRME
+          // 5. ANA SAYFAYA DÖN
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const AnaSayfa()),
@@ -413,7 +425,6 @@ class _ProfilAyarlariSayfasiState extends State<ProfilAyarlariSayfasi> {
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
                   } else {
-                    // Güvenli çıkış
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (context) => const AnaSayfa()),

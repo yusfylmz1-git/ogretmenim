@@ -14,6 +14,7 @@ import 'package:ogretmenim/ozellikler/siniflar/siniflar_provider.dart';
 // YENİ EKLENEN IMPORT (Sınıf Ekleme Sayfasına Gitmek İçin):
 import 'package:ogretmenim/ozellikler/siniflar/siniflar_sayfasi.dart';
 import 'package:ogretmenim/ozellikler/kazanimlar/kazanimlar_sayfasi.dart';
+import 'package:ogretmenim/ozellikler/sinav_analiz/sinav_analizi_sayfasi.dart';
 
 class OzetSayfasi extends ConsumerStatefulWidget {
   const OzetSayfasi({super.key});
@@ -375,7 +376,14 @@ class _OzetSayfasiState extends ConsumerState<OzetSayfasi> {
           "Sınav Analizi",
           Icons.bar_chart_rounded,
           const Color(0xFF8B5CF6),
-          () {},
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const SinavAnalizSayfasi(),
+              ),
+            );
+          },
         ),
         _islemButonu(
           context,

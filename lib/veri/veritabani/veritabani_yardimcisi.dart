@@ -9,8 +9,7 @@ class VeritabaniYardimcisi {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    // Yeni tablo eklediğimiz için versiyonu değiştirdik (v6)
-    _database = await _initDB('ogretmenim_v6.db');
+    _database = await _initDB('ogretmenim_v14.db');
     return _database!;
   }
 
@@ -24,6 +23,7 @@ class VeritabaniYardimcisi {
       onCreate: _createDB,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
+        await db.rawQuery('PRAGMA journal_mode = WAL');
       },
     );
   }
@@ -146,7 +146,7 @@ class VeritabaniYardimcisi {
       "INSERT OR IGNORE INTO sistem_ayarlari (anahtar, deger) VALUES ('egitim_baslangic', '2025-09-08')",
     );
 
-    // 9. KAZANIMLAR (YENİ TABLO)
+    // 9. KAZANIMLAR
     await db.execute('''
       CREATE TABLE kazanimlar (
         id $idType,
@@ -158,9 +158,160 @@ class VeritabaniYardimcisi {
         ders_tipi $textType
       )
     ''');
+
+    // 10. SINAVLAR
+    await db.execute('''
+      CREATE TABLE sinavlar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sinav_adi TEXT NOT NULL,
+        sinif TEXT NOT NULL,
+        ders TEXT NOT NULL,
+        tarih TEXT NOT NULL,
+        ortalama REAL,
+        not_sayisi INTEGER,
+        sinav_tipi TEXT DEFAULT 'klasik',
+        soru_sayisi INTEGER DEFAULT 0,
+        soru_puanlari TEXT
+      )
+    ''');
+
+    // 11. SINAV NOTLARI
+    await db.execute('''
+      CREATE TABLE sinav_notlari (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sinav_id INTEGER NOT NULL,
+        ogrenci_id INTEGER NOT NULL,
+        ogrenci_ad_soyad TEXT,
+        notu INTEGER,
+        toplam_not REAL,
+        soru_bazli_notlar TEXT,
+        FOREIGN KEY (sinav_id) REFERENCES sinavlar (id) ON DELETE CASCADE
+      )
+    ''');
   }
 
-  // --- KAZANIM İŞLEMLERİ ---
+  // --- SINAV İŞLEMLERİ ---
+
+  Future<int> sinavEkle(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('sinavlar', row);
+  }
+
+  Future<List<Map<String, dynamic>>> sinavlariGetir() async {
+    final db = await instance.database;
+
+    try {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_sinavlar_tarih ON sinavlar(tarih DESC)',
+      );
+    } catch (e) {
+      print("⚠️ Index hatası: $e");
+    }
+
+    return await db.query('sinavlar', orderBy: 'tarih DESC');
+  }
+
+  Future<int> sinavSil(int id) async {
+    final db = await instance.database;
+    await db.delete('sinav_notlari', where: 'sinav_id = ?', whereArgs: [id]);
+    return await db.delete('sinavlar', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- MEVCUT SINAVI GÜNCELLEME ---
+  Future<void> sinavGuncelle({
+    required int sinavId,
+    required Map<String, dynamic> sinavBilgileri,
+    required List<Map<String, dynamic>> yeniNotlar,
+  }) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      await txn.update(
+        'sinavlar',
+        sinavBilgileri,
+        where: 'id = ?',
+        whereArgs: [sinavId],
+      );
+      await txn.delete(
+        'sinav_notlari',
+        where: 'sinav_id = ?',
+        whereArgs: [sinavId],
+      );
+
+      for (var not in yeniNotlar) {
+        final notVerisi = Map<String, dynamic>.from(not);
+        notVerisi['sinav_id'] = sinavId;
+        await txn.insert('sinav_notlari', notVerisi);
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>?> sinavGetirById(int id) async {
+    final db = await instance.database;
+    final results = await db.query(
+      'sinavlar',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (results.isNotEmpty) return results.first;
+    return null;
+  }
+
+  Future<void> sinavVeNotlariTopluKaydet({
+    required Map<String, dynamic> sinavMap,
+    required List<Map<String, dynamic>> notlarListesi,
+  }) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      final sinavId = await txn.insert('sinavlar', sinavMap);
+      for (var not in notlarListesi) {
+        final yeniNot = Map<String, dynamic>.from(not);
+        yeniNot['sinav_id'] = sinavId;
+        await txn.insert('sinav_notlari', yeniNot);
+      }
+    });
+  }
+
+  // --- NOT İŞLEMLERİ (GÜNCELLENEN KISIM) ---
+
+  Future<void> notKaydet(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    final varMi = await db.query(
+      'sinav_notlari',
+      where: 'sinav_id = ? AND ogrenci_id = ?',
+      whereArgs: [row['sinav_id'], row['ogrenci_id']],
+    );
+
+    if (varMi.isNotEmpty) {
+      await db.update(
+        'sinav_notlari',
+        row,
+        where: 'sinav_id = ? AND ogrenci_id = ?',
+        whereArgs: [row['sinav_id'], row['ogrenci_id']],
+      );
+    } else {
+      await db.insert('sinav_notlari', row);
+    }
+  }
+
+  // 🔥 DÜZELTME BURADA: Artık öğrencilerden numarayı da çekiyor (JOIN işlemi)
+  Future<List<Map<String, dynamic>>> notlariGetir(int sinavId) async {
+    final db = await instance.database;
+    // rawQuery ile iki tabloyu birleştiriyoruz: notlar + ogrenciler(numara)
+    return await db.rawQuery(
+      '''
+      SELECT sinav_notlari.*, ogrenciler.numara 
+      FROM sinav_notlari 
+      LEFT JOIN ogrenciler ON sinav_notlari.ogrenci_id = ogrenciler.id 
+      WHERE sinav_notlari.sinav_id = ?
+      ORDER BY sinav_notlari.notu DESC
+    ''',
+      [sinavId],
+    );
+  }
+
+  // --- DİĞER STANDART İŞLEMLER ---
 
   Future<void> kazanimlariTemizle() async {
     final db = await instance.database;
@@ -190,8 +341,6 @@ class VeritabaniYardimcisi {
       orderBy: 'hafta ASC',
     );
   }
-
-  // --- MEVCUT DİĞER FONKSİYONLAR ---
 
   Future<int> sinifEkle(Map<String, dynamic> row) async {
     final db = await instance.database;
@@ -225,6 +374,13 @@ class VeritabaniYardimcisi {
       whereArgs: [sinifId],
       orderBy: 'numara ASC',
     );
+  }
+
+  Future<Map<String, dynamic>?> ogrenciGetir(int id) async {
+    final db = await instance.database;
+    final maps = await db.query('ogrenciler', where: 'id = ?', whereArgs: [id]);
+    if (maps.isNotEmpty) return maps.first;
+    return null;
   }
 
   Future<int> ogrenciSil(int id) async {
@@ -315,9 +471,7 @@ class VeritabaniYardimcisi {
       where: 'anahtar = ?',
       whereArgs: [anahtar],
     );
-    if (maps.isNotEmpty) {
-      return maps.first['deger'] as String;
-    }
+    if (maps.isNotEmpty) return maps.first['deger'] as String;
     return null;
   }
 }
